@@ -194,11 +194,13 @@ def run_conversation(prompt: str):
             
             # Adiciona a resposta final ao histórico e à interface
             st.session_state.messages.append({"role": "model", "parts": [{"text": final_text}]})
+            st.rerun() # FORÇA O RERUN PARA EXIBIR A RESPOSTA IMEDIATAMENTE!
             
         # 4.2. Se o modelo respondeu diretamente com texto
         else:
             final_text = candidate["content"]["parts"][0]["text"]
             st.session_state.messages.append({"role": "model", "parts": [{"text": final_text}]})
+            st.rerun() # FORÇA O RERUN PARA EXIBIR A RESPOSTA IMEDIATAMENTE!
 
     except Exception as e:
         st.error(f"Um erro ocorreu ao processar a resposta da API: {e}. Isso pode indicar um erro de parse do JSON da API.")
