@@ -7,7 +7,19 @@ from io import BytesIO
 
 def carregar_dados_ou_demo():
     """Tenta carregar o creditcard.csv ou cria um DataFrame de demonstração."""
-    file_path = 'data/creditcard.csv'
+    # SUBSTITUA ESTA PARTE:
+    # file_path = 'data/creditcard.csv'
+    # df_retorno = pd.read_csv(file_path)
+
+    # POR ESTA PARTE (usando a URL pública):
+    url_dados = "https://www.dropbox.com/scl/fi/ibuflwf3bvau3a624f3ep/creditcard.csv?rlkey=duuiekt9cskkoya6rf3opokht&st=50sq7ym3&dl=0"
+    try:
+        df_retorno = pd.read_csv(url_dados)
+        print("[INFO] Dados carregados com sucesso via URL.")
+        return df_retorno
+    except Exception as e:
+        print(f"[ERRO] Falha ao carregar dados da URL: {e}")
+        # ... fallback para dados de demonstração (se a URL falhar)
     
     try:
         if not os.path.exists(file_path):
@@ -154,3 +166,4 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
     except Exception as e:
         plt.close()
         return f"Erro inesperado ao gerar o gráfico: {e}"
+
