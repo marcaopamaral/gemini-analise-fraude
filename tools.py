@@ -4,52 +4,56 @@ import os
 import io
 import sys
 from io import BytesIO
+import requests # Importação necessária para o carregamento via URL
+
+# Variável global para a URL do arquivo grande (150MB)
+# IMPORTANTE: Substitua esta URL pela URL pública de download do seu arquivo creditcard.csv
+PUBLIC_CSV_URL = "https://example.com/seu_arquivo_publico_de_150MB.csv" 
 
 def carregar_dados_ou_demo():
-    """Tenta carregar o creditcard.csv ou cria um DataFrame de demonstração."""
-    # SUBSTITUA ESTA PARTE:
-    # file_path = 'data/creditcard.csv'
-    # df_retorno = pd.read_csv(file_path)
-
-    # POR ESTA PARTE (usando a URL pública):
-    url_dados = "https://www.dropbox.com/scl/fi/ibuflwf3bvau3a624f3ep/creditcard.csv?rlkey=duuiekt9cskkoya6rf3opokht&st=50sq7ym3&dl=0"
-    try:
-        df_retorno = pd.read_csv(url_dados)
-        print("[INFO] Dados carregados com sucesso via URL.")
-        return df_retorno
-    except Exception as e:
-        print(f"[ERRO] Falha ao carregar dados da URL: {e}")
-        # ... fallback para dados de demonstração (se a URL falhar)
+    """Tenta carregar o creditcard.csv via URL pública ou cria um DataFrame de demonstração."""
     
-    try:
-        if not os.path.exists(file_path):
-            print(f"[AVISO] Arquivo '{file_path}' não encontrado. Criando DataFrame de demonstração.")
-            
-            # DataFrame de demonstração com a estrutura exigida
-            data = {
-                'Time': range(100),
-                'Amount': [10 + i % 100 for i in range(100)],
-                'Class': [0] * 95 + [1] * 5  # 5% de fraude
-            }
-            # Adiciona as colunas V1 a V28 como zeros
-            for i in range(1, 29):
-                data[f'V{i}'] = [i * 0.1 for i in range(100)]
-                
-            colunas_pca = [f'V{i}' for i in range(1, 29)]
-            colunas_ordenadas = ['Time'] + colunas_pca + ['Amount', 'Class']
-            
-            df_retorno = pd.DataFrame(data).reindex(columns=colunas_ordenadas)
+    # 1. Tenta carregar o arquivo da URL pública
+    if PUBLIC_CSV_URL and PUBLIC_CSV_URL != "https://www.dropbox.com/scl/fi/ibuflwf3bvau3a624f3ep/creditcard.csv?rlkey=duuiekt9cskkoya6rf3opokht&st=50sq7ym3&dl=0":
+        try:
+            print(f"[INFO] Tentando carregar dados da URL: {PUBLIC_CSV_URL}")
+            # pd.read_csv pode ler diretamente de uma URL
+            df_retorno = pd.read_csv(PUBLIC_CSV_URL)
+            print(f"[INFO] Dados carregados com sucesso via URL.")
             return df_retorno
-
-        else:
-            # Em um deploy real, o arquivo deve estar no repo ou ser carregado pelo usuário
+        except Exception as e:
+            print(f"[AVISO] Falha ao carregar dados da URL ({e}). Recorrendo ao carregamento local/demo.")
+            
+    # 2. Tenta carregar o arquivo localmente (para desenvolvimento)
+    # Em um ambiente de nuvem, isso provavelmente falhará e levará ao demo
+    file_path = 'data/creditcard.csv'
+    if os.path.exists(file_path):
+        try:
             df_retorno = pd.read_csv(file_path)
-            print(f"[INFO] Dados carregados com sucesso de '{file_path}'.")
+            print(f"[INFO] Dados carregados com sucesso de '{file_path}' (Ambiente Local).")
             return df_retorno
+        except Exception as e:
+            print(f"[AVISO] Falha ao carregar arquivo local: {e}. Criando DataFrame de demonstração.")
 
-    except Exception as e:
-        print(f"[ERRO] Falha ao carregar ou criar dados: {e}")
-        return None
+
+    # 3. Cria DataFrame de demonstração (Fallback final)
+    print(f"[AVISO] Arquivo não encontrado ou falha de URL. Criando DataFrame de demonstração.")
+    
+    # DataFrame de demonstração com a estrutura exigida
+    data = {
+        'Time': range(100),
+        'Amount': [10 + i % 100 for i in range(100)],
+        'Class': [0] * 95 + [1] * 5  # 5% de fraude
+    }
+    # Adiciona as colunas V1 a V28 como zeros
+    for i in range(1, 29):
+        data[f'V{i}'] = [i * 0.1 for i in range(100)]
+        
+    colunas_pca = [f'V{i}' for i in range(1, 29)]
+    colunas_ordenadas = ['Time'] + colunas_pca + ['Amount', 'Class']
+    
+    df_retorno = pd.DataFrame(data).reindex(columns=colunas_ordenadas)
+    return df_retorno
 
 
 def consulta_tool(df: pd.DataFrame, codigo_python: str) -> str:
@@ -158,7 +162,7 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
         
         plt.close() # Libera a memória
         
-        return buffer # Retorna o objeto BytesIO (o Agente não deve ver isso, o app.py deve processar)
+        return buffer 
 
     except KeyError as e:
         plt.close()
@@ -166,4 +170,3 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
     except Exception as e:
         plt.close()
         return f"Erro inesperado ao gerar o gráfico: {e}"
-
