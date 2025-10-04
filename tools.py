@@ -7,14 +7,18 @@ from io import BytesIO
 import requests # Importação necessária para o carregamento via URL
 
 # Variável global para a URL do arquivo grande (150MB)
-# IMPORTANTE: Substitua esta URL pela URL pública de download do seu arquivo creditcard.csv
-PUBLIC_CSV_URL = "https://example.com/seu_arquivo_publico_de_150MB.csv" 
+# CORREÇÃO: O link do Dropbox foi alterado de 'dl=0' para 'dl=1' para forçar o download direto
+PUBLIC_CSV_URL = "https://www.dropbox.com/scl/fi/ibuflwf3bvau3a624f3ep/creditcard.csv?rlkey=duuiekt9cskkoya6rf3opokht&st=n1b9m26x&dl=1" 
 
 def carregar_dados_ou_demo():
     """Tenta carregar o creditcard.csv via URL pública ou cria um DataFrame de demonstração."""
     
+    # URL de Placeholder genérica para verificar se o usuário atualizou a chave
+    GENERIC_PLACEHOLDER_URL = "https://example.com/seu_arquivo_publico_de_150MB.csv"
+
     # 1. Tenta carregar o arquivo da URL pública
-    if PUBLIC_CSV_URL and PUBLIC_CSV_URL != "https://www.dropbox.com/scl/fi/ibuflwf3bvau3a624f3ep/creditcard.csv?rlkey=duuiekt9cskkoya6rf3opokht&st=tmxb4suz&dl=1":
+    # Verifica se a URL está configurada e não é o placeholder genérico
+    if PUBLIC_CSV_URL and PUBLIC_CSV_URL != GENERIC_PLACEHOLDER_URL:
         try:
             print(f"[INFO] Tentando carregar dados da URL: {PUBLIC_CSV_URL}")
             # pd.read_csv pode ler diretamente de uma URL
@@ -170,4 +174,3 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
     except Exception as e:
         plt.close()
         return f"Erro inesperado ao gerar o gráfico: {e}"
-
