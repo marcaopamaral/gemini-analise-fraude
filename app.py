@@ -1,170 +1,247 @@
-import pandas as pd
-import matplotlib.pyplot as plt
+import streamlit as st
 import os
-import io
+import time
+import json
+import requests
+import pandas as pd
+from tools import carregar_dados_ou_demo, consulta_tool, grafico_tool # Importa todas as funções de tools
+from io import BytesIO
 
-# Variável global para armazenar o DataFrame
-df = None
+# --- 1. Configurações e Constantes ---
 
-def carregar_dados_ou_demo():
-    """Tenta carregar o creditcard.csv ou cria um DataFrame de demonstração."""
-    global df
-    file_path = 'data/creditcard.csv'
-    try:
-        if not os.path.exists(file_path):
-            print(f"[AVISO] Arquivo '{file_path}' não encontrado. Criando DataFrame de demonstração.")
-            
-            # DataFrame de demonstração com a estrutura exigida
-            data = {
-                'Time': range(100),
-                'V1': [i * 0.1 for i in range(100)],
-                'V28': [i * 0.5 for i in range(100)],
-                'Amount': [10 + i % 100 for i in range(100)],
-                'Class': [0] * 95 + [1] * 5  # 5% de fraude
+MODEL_NAME = "gemini-2.5-flash-preview-05-20"
+API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent"
+
+# Definição das Ferramentas (mantida)
+SYSTEM_INSTRUCTION_TEXT = "Você é um Analista de Fraude de Cartão de Crédito especializado em pandas. Sua tarefa é analisar o DataFrame 'df' que contém dados transacionais. As colunas V1-V28 são resultados de PCA. A coluna 'Amount' é o valor, 'Time' é o tempo e 'Class' (0=Normal, 1=Fraude) é o alvo. Use as ferramentas 'consulta_tool' para todas as análises de dados e 'grafico_tool' para visualizar os dados. Retorne apenas o resultado da análise ou a resposta amigável ao usuário. Se o usuário pedir para analisar ou resumir dados, USE A FERRAMENTA. NÃO tente executar código Python diretamente na sua resposta."
+
+TOOL_DECLARATIONS = [
+    {
+        "functionDeclarations": [
+            {
+                "name": "consulta_tool",
+                "description": "Realiza consultas e análises estatísticas no DataFrame (nomeado 'df'). Deve gerar o código Python COMPLETO em string (ex: 'df.describe()', 'df[df[\"Class\"] == 1].shape[0]', 'df[\"Amount\"].mean()').",
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {"codigo_python": {"type": "STRING", "description": "O código Python válido (como string) para executar no DataFrame 'df'."}},
+                    "required": ["codigo_python"]
+                }
+            },
+            {
+                "name": "grafico_tool",
+                "description": "Gera um gráfico com base nos dados. Tipos aceitos: 'hist' (1 coluna), 'box' (1 coluna, comparado com Class), 'scatter' (2 colunas), 'bar' (coluna 'Class').",
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "tipo_grafico": {"type": "STRING", "description": "O tipo de gráfico a ser gerado ('hist', 'box', 'scatter', 'bar')."},
+                        "colunas": {"type": "ARRAY", "description": "Uma lista de 1 ou 2 strings com os nomes das colunas.", "items": {"type": "STRING"}},
+                        "titulo": {"type": "STRING", "description": "O título descritivo do gráfico."}
+                    },
+                    "required": ["tipo_grafico", "colunas", "titulo"]
+                }
             }
-            # Adiciona as colunas V2 a V27 como zeros para completar as 28 colunas PCA
-            for i in range(2, 28):
-                data[f'V{i}'] = [0] * 100
+        ]
+    }
+]
+
+# Mapeamento para chamar as funções Python reais
+# NOTA: O mapeamento é feito dentro de run_conversation para passar o 'df'
+# TOOL_MAP = { "consulta_tool": consulta_tool, "grafico_tool": grafico_tool }
+
+
+# --- 2. Funções de Chamada de API e Lógica de Tool Calling ---
+
+@st.cache_data(show_spinner=False)
+def get_dataframe():
+    """Carrega o DataFrame apenas uma vez e usa o cache do Streamlit."""
+    return carregar_dados_ou_demo()
+
+def make_api_call_with_backoff(payload, api_key, max_retries=5):
+    """Realiza a chamada à API do Gemini com backoff exponencial."""
+    if not api_key: return None
+    headers = {'Content-Type': 'application/json'}
+    
+    for attempt in range(max_retries):
+        try:
+            url_with_key = f"{API_URL}?key={api_key}"
+            response = requests.post(url_with_key, headers=headers, data=json.dumps(payload))
+            response.raise_for_status()
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            if response.status_code in [429, 500, 503] and attempt < max_retries - 1:
+                wait_time = 2 ** attempt
+                time.sleep(wait_time)
+            else:
+                st.error(f"Erro HTTP {response.status_code}: {e}. Verifique a chave.")
+                return None
+        except requests.exceptions.RequestException as e:
+            st.error(f"Erro de Conexão: {e}")
+            return None
+    
+    st.error("Número máximo de tentativas de API excedido.")
+    return None
+
+def run_conversation(df: pd.DataFrame, user_input: str, api_key: str):
+    """Controla o fluxo da conversa (Usuário -> Agente -> Ferramenta -> Agente)."""
+
+    st.session_state.messages.append({"role": "user", "parts": [{"text": user_input}]})
+    
+    with st.chat_message("user"):
+        st.markdown(user_input)
+
+    with st.chat_message("assistant"):
+        placeholder = st.empty()
+        placeholder.markdown("Pensando...")
+
+        # --- Primeira Chamada: Agente decide ---
+        payload = {
+            "contents": st.session_state.messages,
+            "tools": TOOL_DECLARATIONS,
+            "systemInstruction": {"parts": [{"text": SYSTEM_INSTRUCTION_TEXT}]}
+        }
+        response_json = make_api_call_with_backoff(payload, api_key)
+        if response_json is None: 
+            st.session_state.messages.pop() # Remove entrada do usuário
+            return
+
+        candidate = response_json.get("candidates", [{}])[0]
+        first_part = candidate.get('content', {}).get('parts', [{}])[0]
+        
+        # --- Lógica de Chamada de Ferramenta ---
+        if 'functionCall' in first_part or 'functionCalls' in first_part:
+            
+            function_calls = []
+            if 'functionCalls' in first_part: function_calls = first_part['functionCalls']
+            elif 'functionCall' in first_part: function_calls = [first_part['functionCall']]
+
+            tool_results = []
+            
+            for call in function_calls:
+                function_name = call['name']
+                args = dict(call['args'])
                 
-            # Garante que as colunas V estejam na ordem correta, seguido por Amount, Class
-            colunas_pca = [f'V{i}' for i in range(1, 29)]
-            colunas_ordenadas = ['Time'] + colunas_pca + ['Amount', 'Class']
-            
-            df = pd.DataFrame(data).reindex(columns=colunas_ordenadas)
+                placeholder.markdown(f"**Agente executando:** `{function_name}`...")
 
+                if function_name == "consulta_tool":
+                    # Passa o df para a tool
+                    result = consulta_tool(df, **args)
+                    tool_response_text = result
+                elif function_name == "grafico_tool":
+                    # Passa o df para a tool
+                    plot_buffer_or_error = grafico_tool(df, **args)
+                    
+                    if isinstance(plot_buffer_or_error, BytesIO):
+                        # Armazena o buffer do gráfico na sessão para exibição
+                        st.session_state.current_plot_buffer = plot_buffer_or_error
+                        tool_response_text = f"Resultado: Gráfico gerado em memória (BytesIO) com o título: {args.get('titulo')}"
+                    else:
+                        tool_response_text = f"Resultado: ERRO na geração do gráfico: {plot_buffer_or_error}"
+                        
+                else:
+                    tool_response_text = f"ERRO: Função '{function_name}' não mapeada."
+
+                tool_results.append({
+                    "functionResponse": {
+                        "name": function_name,
+                        "response": {"result": tool_response_text}
+                    }
+                })
+
+            # Adiciona o resultado da ferramenta ao histórico
+            st.session_state.messages.append({"role": "tool", "parts": tool_results})
+            
+            # --- Segunda Chamada: Agente gera a resposta final ---
+            payload_tool_response = {
+                "contents": st.session_state.messages,
+                "tools": TOOL_DECLARATIONS,
+                "systemInstruction": {"parts": [{"text": SYSTEM_INSTRUCTION_TEXT}]}
+            }
+            
+            final_response_json = make_api_call_with_backoff(payload_tool_response, api_key)
+            
+            if final_response_json is None: 
+                st.session_state.messages.pop() # Remove tool
+                st.session_state.messages.pop() # Remove user
+                return
+                
+            final_text = final_response_json.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'Não foi possível obter a resposta final do Agente.')
+            
+            placeholder.markdown(final_text)
+
+            # Exibe o gráfico se ele foi gerado na primeira iteração (grafico_tool)
+            if 'current_plot_buffer' in st.session_state and st.session_state.current_plot_buffer is not None:
+                st.image(st.session_state.current_plot_buffer, caption=args.get('titulo', 'Gráfico de Análise'), use_column_width=True)
+                st.session_state.current_plot_buffer = None # Limpa após exibição
+
+            st.session_state.messages.append({"role": "model", "parts": [{"text": final_text}]})
+
+        # --- Lógica de Resposta Direta (Sem Tool Call) ---
         else:
-            df = pd.read_csv(file_path)
-            print(f"[INFO] Dados carregados com sucesso de '{file_path}'.")
-            
-        print(f"[INFO] DataFrame (df) pronto. Colunas: {df.columns.tolist()}")
-
-    except Exception as e:
-        print(f"[ERRO] Falha ao carregar ou criar dados: {e}")
-        df = None # Certifica que df é None em caso de falha total
-
-# Carrega os dados uma vez ao importar o módulo
-carregar_dados_ou_demo()
+            agent_text = first_part.get('text', 'Não foi possível obter resposta do Agente.')
+            placeholder.markdown(agent_text)
+            st.session_state.messages.append({"role": "model", "parts": [{"text": agent_text}]})
 
 
-def consulta_tool(codigo_python: str) -> str:
-    """
-    Executa um trecho de código Python no DataFrame 'df' e retorna o resultado formatado.
+# --- 3. Streamlit UI (Interface do Usuário) ---
+
+st.set_page_config(page_title="Agente de Análise de Fraude Gemini", layout="centered")
+st.title("Agente de Análise de Fraude 💳")
+
+# --- Carregamento e Gerenciamento do DataFrame ---
+df_analysis = get_dataframe()
+
+# --- Sidebar para a Chave API ---
+with st.sidebar:
+    st.header("Configuração e Dados")
+    # Tenta ler a chave de 'secrets' (Streamlit Cloud) ou usa string vazia
+    api_key = st.text_input(
+        "Sua Chave API do Gemini", 
+        type="password",
+        value=st.secrets.get("GEMINI_API_KEY", "")
+    )
+    if not api_key:
+        st.warning("Insira a chave API para ativar o Agente.")
+
+    st.markdown("---")
     
-    Args:
-        codigo_python: O código Python (como string) para executar no DataFrame 'df'.
-        
-    Returns:
-        O resultado da execução do código como uma string.
-    """
-    global df
-    if df is None:
-        return "Erro: O DataFrame não foi carregado corretamente."
-        
-    # Usa um buffer de texto para capturar a saída padrão (ex: print())
-    stdout_buffer = io.StringIO()
-    # Redireciona a saída padrão para o buffer
-    sys.stdout = stdout_buffer
-
-    try:
-        # A função exec() executa o código; o DataFrame 'df' está disponível no escopo global
-        exec_globals = {'df': df}
-        # Executa o código Python
-        exec(codigo_python, exec_globals)
-        
-        # Recupera a saída (se houver print ou saída de console)
-        output = stdout_buffer.getvalue().strip()
-        
-        # Se não houve saída de console (output vazio), tenta avaliar o código (eval)
-        if not output:
-            try:
-                # Usa eval() para obter o valor de retorno de expressões simples
-                result = eval(codigo_python, {'df': df})
-                # Retorna a representação em string do resultado (incluindo DataFrames/Series)
-                return str(result)
-            except NameError:
-                 # Captura NameError se o código não for uma expressão avaliável
-                return "Código Python executado. Sem valor de retorno (use 'print()' se necessário) ou erro de variável. Retorno: OK"
-            except Exception as e:
-                # Outros erros de eval (ex: sintaxe)
-                return f"Erro na execução (eval) do código '{codigo_python}': {e}"
+    st.subheader("Status do DataFrame")
+    if df_analysis is not None:
+        if df_analysis.shape[0] == 100:
+            st.warning("Arquivo CSV **não encontrado**. Usando dados de **DEMONSTRAÇÃO**.")
         else:
-            # Retorna a saída capturada (ex: resultado de df.head() que usa print)
-            return output
-            
-    except Exception as e:
-        return f"Erro na execução do código Python: {e}"
-        
-    finally:
-        # Restaura a saída padrão original
-        sys.stdout = sys.__stdout__
+            st.success("Dados carregados com sucesso.")
+        st.caption(f"Linhas: {df_analysis.shape[0]}, Colunas: {df_analysis.shape[1]}")
+        st.dataframe(df_analysis.head(5), use_container_width=True)
+    else:
+        st.error("Falha ao carregar dados. Verifique a pasta 'data/'.")
+    st.markdown("---")
+    st.info("No Streamlit Cloud, configure o segredo `GEMINI_API_KEY`.")
 
 
-def grafico_tool(tipo_grafico: str, colunas: list, titulo: str) -> str:
-    """
-    Gera um gráfico com base no tipo especificado e salva como PNG.
-    
-    Args:
-        tipo_grafico: Tipo de gráfico ('hist', 'box', 'scatter', 'bar').
-        colunas: Lista de colunas a serem plotadas.
-        titulo: Título do gráfico.
-        
-    Returns:
-        O caminho onde o gráfico foi salvo.
-    """
-    global df
-    if df is None:
-        return "Erro: O DataFrame não foi carregado corretamente para gerar o gráfico."
+# Inicializa o estado da sessão para o histórico do chat
+if "messages" not in st.session_state:
+    st.session_state.messages = [{"role": "model", "parts": [{"text": "Olá! Eu sou o Agente de Análise de Fraude. Faça uma pergunta sobre as transações, como **'Qual é a média dos valores?'** ou **'Mostre um boxplot da V1.'**"}]}]
+if "current_plot_buffer" not in st.session_state:
+     st.session_state.current_plot_buffer = None
 
-    output_path = "data/grafico_analise.png"
-    
-    try:
-        plt.figure(figsize=(10, 6))
-        
-        if tipo_grafico == 'hist' and len(colunas) == 1:
-            df[colunas[0]].hist(bins=50, edgecolor='black', alpha=0.7)
-            plt.title(f'Histograma de {colunas[0]}')
-            plt.xlabel(colunas[0])
-            plt.ylabel('Frequência')
 
-        elif tipo_grafico == 'box' and len(colunas) == 1:
-            # Boxplot comparando a coluna contra a classe (fraude/normal)
-            df.boxplot(column=colunas[0], by='Class', grid=False, figsize=(8, 6))
-            plt.suptitle('') # Remove o super-título padrão do boxplot
-            plt.title(f'Boxplot de {colunas[0]} por Classe (0=Normal, 1=Fraude)')
-            plt.xlabel('Classe')
-            plt.ylabel(colunas[0])
+# --- Renderiza Histórico de Chat ---
+for message in st.session_state.messages:
+    if message["role"] in ["user", "model"]:
+        with st.chat_message(message["role"]):
+            st.markdown(message["parts"][0]["text"])
             
-        elif tipo_grafico == 'scatter' and len(colunas) == 2:
-            col_x, col_y = colunas[0], colunas[1]
-            plt.scatter(df[col_x], df[col_y], c=df['Class'], cmap='coolwarm', alpha=0.6)
-            plt.title(f'Dispersão de {col_x} vs {col_y} (Cor por Fraude)')
-            plt.xlabel(col_x)
-            plt.ylabel(col_y)
-            plt.colorbar(label='Class (0=Normal, 1=Fraude)')
-            
-        elif tipo_grafico == 'bar' and colunas[0].lower() == 'class':
-            fraudes = df['Class'].value_counts()
-            fraudes.plot(kind='bar', color=['skyblue', 'salmon'])
-            plt.title('Contagem de Transações por Classe')
-            plt.xlabel('Classe (0=Normal, 1=Fraude)')
-            plt.ylabel('Contagem')
-            plt.xticks(rotation=0)
-            
+            # Reexibe o último gráfico se ele estiver no histórico (após uma resposta do modelo)
+            if message["role"] == "model" and st.session_state.current_plot_buffer is None:
+                # Aqui você poderia adicionar lógica para re-exibir gráficos se necessário,
+                # mas mantemos a exibição simples após a geração.
+                pass 
+
+
+# --- Caixa de Input do Usuário ---
+if df_analysis is not None:
+    if prompt := st.chat_input("Pergunte sobre os dados de fraude..."):
+        if not api_key:
+            st.error("Por favor, insira sua Chave API do Gemini na barra lateral para começar.")
         else:
-            plt.close() # Fecha a figura se o tipo for inválido
-            return f"Erro: Tipo de gráfico '{tipo_grafico}' ou número de colunas inválido para a ferramenta."
-        
-        # Ajustes finais e salvamento
-        plt.suptitle(titulo, fontsize=16) # Define o título principal
-        plt.tight_layout()
-        plt.savefig(output_path)
-        plt.close() # Fecha a figura para liberar memória
-        
-        return f"Gráfico salvo com sucesso em: {output_path}"
-
-    except KeyError as e:
-        plt.close()
-        return f"Erro: Coluna não encontrada no DataFrame: {e}. Colunas disponíveis: {df.columns.tolist()}"
-    except Exception as e:
-        plt.close()
-        return f"Erro inesperado ao gerar o gráfico: {e}"
+            run_conversation(df_analysis, prompt, api_key)
