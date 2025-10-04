@@ -14,7 +14,7 @@ def carregar_dados_ou_demo():
     """Tenta carregar o creditcard.csv via URL pública ou cria um DataFrame de demonstração."""
     
     # 1. Tenta carregar o arquivo da URL pública
-    if PUBLIC_CSV_URL and PUBLIC_CSV_URL != "https://www.dropbox.com/scl/fi/ibuflwf3bvau3a624f3ep/creditcard.csv?rlkey=duuiekt9cskkoya6rf3opokht&st=50sq7ym3&dl=0":
+    if PUBLIC_CSV_URL and PUBLIC_CSV_URL != "https://www.dropbox.com/scl/fi/ibuflwf3bvau3a624f3ep/creditcard.csv?rlkey=duuiekt9cskkoya6rf3opokht&st=tmxb4suz&dl=1":
         try:
             print(f"[INFO] Tentando carregar dados da URL: {PUBLIC_CSV_URL}")
             # pd.read_csv pode ler diretamente de uma URL
@@ -170,3 +170,4 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
     except Exception as e:
         plt.close()
         return f"Erro inesperado ao gerar o gráfico: {e}"
+
