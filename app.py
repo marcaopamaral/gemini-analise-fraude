@@ -1,247 +1,268 @@
 import streamlit as st
-import os
-import time
-import json
-import requests
 import pandas as pd
-from tools import carregar_dados_ou_demo, consulta_tool, grafico_tool # Importa todas as funções de tools
+import json
+import time
+import requests
 from io import BytesIO
+from tools import carregar_dados_ou_demo, consulta_tool, grafico_tool # Importa as ferramentas e o carregador
 
-# --- 1. Configurações e Constantes ---
+# --- Configurações Iniciais ---
 
+# URL da API do Gemini (usada para chamadas não-streaming)
+API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent"
 MODEL_NAME = "gemini-2.5-flash-preview-05-20"
-API_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL_NAME}:generateContent"
 
-# Definição das Ferramentas (mantida)
-SYSTEM_INSTRUCTION_TEXT = "Você é um Analista de Fraude de Cartão de Crédito especializado em pandas. Sua tarefa é analisar o DataFrame 'df' que contém dados transacionais. As colunas V1-V28 são resultados de PCA. A coluna 'Amount' é o valor, 'Time' é o tempo e 'Class' (0=Normal, 1=Fraude) é o alvo. Use as ferramentas 'consulta_tool' para todas as análises de dados e 'grafico_tool' para visualizar os dados. Retorne apenas o resultado da análise ou a resposta amigável ao usuário. Se o usuário pedir para analisar ou resumir dados, USE A FERRAMENTA. NÃO tente executar código Python diretamente na sua resposta."
+# Instrução do sistema para guiar o agente
+SYSTEM_INSTRUCTION = (
+    "Você é um Agente de Análise de Fraudes especializado em DataFrames pandas. "
+    "Sua função é responder a perguntas usando as ferramentas 'consulta_tool' ou 'grafico_tool'. "
+    "NÃO gere código Python diretamente na resposta; use as ferramentas."
+    "O DataFrame principal é chamado 'df' e contém colunas 'Time', 'V1' a 'V28', 'Amount' e 'Class'. "
+    "Sempre que o usuário pedir análise numérica ou estatística, use 'consulta_tool'. "
+    "Sempre que o usuário pedir visualização (gráfico, histograma, boxplot), use 'grafico_tool'."
+    "Responda de forma concisa e profissional, em português."
+)
 
-TOOL_DECLARATIONS = [
-    {
-        "functionDeclarations": [
-            {
-                "name": "consulta_tool",
-                "description": "Realiza consultas e análises estatísticas no DataFrame (nomeado 'df'). Deve gerar o código Python COMPLETO em string (ex: 'df.describe()', 'df[df[\"Class\"] == 1].shape[0]', 'df[\"Amount\"].mean()').",
-                "parameters": {
-                    "type": "OBJECT",
-                    "properties": {"codigo_python": {"type": "STRING", "description": "O código Python válido (como string) para executar no DataFrame 'df'."}},
-                    "required": ["codigo_python"]
-                }
-            },
-            {
-                "name": "grafico_tool",
-                "description": "Gera um gráfico com base nos dados. Tipos aceitos: 'hist' (1 coluna), 'box' (1 coluna, comparado com Class), 'scatter' (2 colunas), 'bar' (coluna 'Class').",
-                "parameters": {
-                    "type": "OBJECT",
-                    "properties": {
-                        "tipo_grafico": {"type": "STRING", "description": "O tipo de gráfico a ser gerado ('hist', 'box', 'scatter', 'bar')."},
-                        "colunas": {"type": "ARRAY", "description": "Uma lista de 1 ou 2 strings com os nomes das colunas.", "items": {"type": "STRING"}},
-                        "titulo": {"type": "STRING", "description": "O título descritivo do gráfico."}
-                    },
-                    "required": ["tipo_grafico", "colunas", "titulo"]
-                }
-            }
-        ]
-    }
-]
+# --- Carregamento de Dados (Cache) ---
 
-# Mapeamento para chamar as funções Python reais
-# NOTA: O mapeamento é feito dentro de run_conversation para passar o 'df'
-# TOOL_MAP = { "consulta_tool": consulta_tool, "grafico_tool": grafico_tool }
-
-
-# --- 2. Funções de Chamada de API e Lógica de Tool Calling ---
-
-@st.cache_data(show_spinner=False)
-def get_dataframe():
-    """Carrega o DataFrame apenas uma vez e usa o cache do Streamlit."""
+@st.cache_data(show_spinner="Carregando o DataFrame... (pode levar alguns minutos devido ao tamanho de 150MB)")
+def load_data():
+    """Carrega o DataFrame (via URL) usando a função do tools.py."""
     return carregar_dados_ou_demo()
 
-def make_api_call_with_backoff(payload, api_key, max_retries=5):
-    """Realiza a chamada à API do Gemini com backoff exponencial."""
-    if not api_key: return None
-    headers = {'Content-Type': 'application/json'}
+# Carrega o DataFrame no estado da aplicação
+df = load_data()
+
+
+# --- Funções de Comunicação com a API ---
+
+def call_gemini_api(history: list, tools: list | None = None, is_tool_call: bool = False) -> dict:
+    """Função central para chamar a API do Gemini com backoff exponencial."""
     
+    # Tenta carregar a API Key dos segredos do Streamlit Cloud
+    api_key = st.secrets.get("GEMINI_API_KEY", "")
+    if not api_key:
+        # Se falhar, tenta carregar do st.session_state (campo de input da sidebar)
+        api_key = st.session_state.get("api_key_input", "")
+    
+    if not api_key:
+        st.error("Por favor, insira sua Chave de API Gemini na barra lateral.")
+        return {"candidates": [{"content": {"parts": [{"text": "ERRO: Chave API ausente."}]}}]}
+
+    # O payload deve incluir o histórico de chat e a instrução do sistema
+    payload = {
+        "contents": history,
+        "systemInstruction": {"parts": [{"text": SYSTEM_INSTRUCTION}]},
+        "config": { # Configurações para a chamada, incluindo ferramentas
+            "maxOutputTokens": 4096,
+        }
+    }
+    
+    if tools:
+        payload["tools"] = tools
+
+    headers = {
+        'Content-Type': 'application/json'
+    }
+
+    # Lógica de backoff exponencial para lidar com erros de rede/servidor
+    max_retries = 5
     for attempt in range(max_retries):
         try:
-            url_with_key = f"{API_URL}?key={api_key}"
-            response = requests.post(url_with_key, headers=headers, data=json.dumps(payload))
-            response.raise_for_status()
+            # Anexa a chave API diretamente na URL
+            response = requests.post(f"{API_URL}?key={api_key}", headers=headers, data=json.dumps(payload))
+            response.raise_for_status() # Lança exceção para códigos 4xx/5xx
             return response.json()
-        except requests.exceptions.HTTPError as e:
-            if response.status_code in [429, 500, 503] and attempt < max_retries - 1:
-                wait_time = 2 ** attempt
-                time.sleep(wait_time)
-            else:
-                st.error(f"Erro HTTP {response.status_code}: {e}. Verifique a chave.")
-                return None
+
         except requests.exceptions.RequestException as e:
-            st.error(f"Erro de Conexão: {e}")
-            return None
-    
-    st.error("Número máximo de tentativas de API excedido.")
-    return None
-
-def run_conversation(df: pd.DataFrame, user_input: str, api_key: str):
-    """Controla o fluxo da conversa (Usuário -> Agente -> Ferramenta -> Agente)."""
-
-    st.session_state.messages.append({"role": "user", "parts": [{"text": user_input}]})
-    
-    with st.chat_message("user"):
-        st.markdown(user_input)
-
-    with st.chat_message("assistant"):
-        placeholder = st.empty()
-        placeholder.markdown("Pensando...")
-
-        # --- Primeira Chamada: Agente decide ---
-        payload = {
-            "contents": st.session_state.messages,
-            "tools": TOOL_DECLARATIONS,
-            "systemInstruction": {"parts": [{"text": SYSTEM_INSTRUCTION_TEXT}]}
-        }
-        response_json = make_api_call_with_backoff(payload, api_key)
-        if response_json is None: 
-            st.session_state.messages.pop() # Remove entrada do usuário
-            return
-
-        candidate = response_json.get("candidates", [{}])[0]
-        first_part = candidate.get('content', {}).get('parts', [{}])[0]
+            st.warning(f"Erro de comunicação com a API: {e}. Tentando novamente em {2**attempt}s...")
+            if attempt == max_retries - 1:
+                st.error(f"Falha na comunicação com a API após {max_retries} tentativas.")
+                return {}
+            time.sleep(2 ** attempt)
         
-        # --- Lógica de Chamada de Ferramenta ---
-        if 'functionCall' in first_part or 'functionCalls' in first_part:
-            
-            function_calls = []
-            if 'functionCalls' in first_part: function_calls = first_part['functionCalls']
-            elif 'functionCall' in first_part: function_calls = [first_part['functionCall']]
+    return {} # Retorno de segurança
 
-            tool_results = []
-            
-            for call in function_calls:
-                function_name = call['name']
-                args = dict(call['args'])
-                
-                placeholder.markdown(f"**Agente executando:** `{function_name}`...")
 
-                if function_name == "consulta_tool":
-                    # Passa o df para a tool
-                    result = consulta_tool(df, **args)
-                    tool_response_text = result
-                elif function_name == "grafico_tool":
-                    # Passa o df para a tool
-                    plot_buffer_or_error = grafico_tool(df, **args)
-                    
-                    if isinstance(plot_buffer_or_error, BytesIO):
-                        # Armazena o buffer do gráfico na sessão para exibição
-                        st.session_state.current_plot_buffer = plot_buffer_or_error
-                        tool_response_text = f"Resultado: Gráfico gerado em memória (BytesIO) com o título: {args.get('titulo')}"
-                    else:
-                        tool_response_text = f"Resultado: ERRO na geração do gráfico: {plot_buffer_or_error}"
-                        
-                else:
-                    tool_response_text = f"ERRO: Função '{function_name}' não mapeada."
+def run_conversation(prompt: str):
+    """Gerencia o ciclo de conversa, incluindo a chamada de ferramentas."""
+    
+    # 1. Adiciona a nova pergunta ao histórico de chat
+    st.session_state.messages.append({"role": "user", "parts": [{"text": prompt}]})
 
-                tool_results.append({
-                    "functionResponse": {
-                        "name": function_name,
-                        "response": {"result": tool_response_text}
+    # 2. Prepara a lista de ferramentas disponíveis
+    available_tools = [
+        {
+            "functionDeclarations": [
+                {
+                    "name": "consulta_tool",
+                    "description": "Executa código Python para consultar o DataFrame 'df' e retorna resultados como string. Use para obter estatísticas, valores, linhas específicas, etc.",
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "codigo_python": {"type": "STRING", "description": "O código Python a ser executado no DataFrame 'df'. Ex: df.shape[0]"}
+                        },
+                        "required": ["codigo_python"]
                     }
-                })
+                },
+                {
+                    "name": "grafico_tool",
+                    "description": "Gera um gráfico e retorna a imagem em buffer de memória. Use para histogramas, boxplots, dispersão (scatter) e gráficos de barra.",
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "tipo_grafico": {"type": "STRING", "description": "Tipo: 'hist', 'box', 'scatter' ou 'bar'."},
+                            "colunas": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Lista de 1 ou 2 colunas para o gráfico. Ex: ['Amount']"},
+                            "titulo": {"type": "STRING", "description": "Título descritivo para o gráfico."}
+                        },
+                        "required": ["tipo_grafico", "colunas", "titulo"]
+                    }
+                }
+            ]
+        }
+    ]
 
-            # Adiciona o resultado da ferramenta ao histórico
-            st.session_state.messages.append({"role": "tool", "parts": tool_results})
+    # 3. Primeira chamada: Envia a pergunta e o histórico para ver se o modelo usa a ferramenta
+    with st.spinner("🧠 Pensando... (Primeira Chamada)"):
+        response_1 = call_gemini_api(st.session_state.messages, tools=available_tools)
+    
+    # 4. Processa a resposta (Texto ou Chamada de Função)
+    try:
+        candidate = response_1["candidates"][0]
+        
+        # 4.1. Se o modelo chamou uma função (Function Call)
+        if "functionCall" in candidate["content"]["parts"][0]:
+            function_call = candidate["content"]["parts"][0]["functionCall"]
+            func_name = function_call["name"]
+            func_args = dict(function_call["args"])
             
-            # --- Segunda Chamada: Agente gera a resposta final ---
-            payload_tool_response = {
-                "contents": st.session_state.messages,
-                "tools": TOOL_DECLARATIONS,
-                "systemInstruction": {"parts": [{"text": SYSTEM_INSTRUCTION_TEXT}]}
-            }
-            
-            final_response_json = make_api_call_with_backoff(payload_tool_response, api_key)
-            
-            if final_response_json is None: 
-                st.session_state.messages.pop() # Remove tool
-                st.session_state.messages.pop() # Remove user
-                return
+            # Adiciona a chamada de função ao histórico
+            st.session_state.messages.append(candidate["content"])
+
+            # Executa a função localmente
+            if func_name == "consulta_tool":
+                with st.spinner(f"🛠️ Executando consulta: `{func_args.get('codigo_python')}`"):
+                    tool_output = consulta_tool(df, func_args["codigo_python"])
                 
-            final_text = final_response_json.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])[0].get('text', 'Não foi possível obter a resposta final do Agente.')
+                # Adiciona o resultado da ferramenta ao histórico
+                tool_result_part = {
+                    "functionResponse": {
+                        "name": "consulta_tool",
+                        "response": {"output": tool_output}
+                    }
+                }
+                st.session_state.messages.append({"role": "user", "parts": [tool_result_part]})
+                
+            elif func_name == "grafico_tool":
+                with st.spinner(f"📊 Gerando gráfico: {func_args.get('titulo')}"):
+                    buffer_ou_erro = grafico_tool(df, func_args.get("tipo_grafico"), func_args.get("colunas"), func_args.get("titulo"))
+                
+                if isinstance(buffer_ou_erro, BytesIO):
+                    # Se for BytesIO (gráfico), armazena no estado para exibição
+                    st.session_state.tool_image = buffer_ou_erro
+                    tool_output = "Gráfico gerado com sucesso e salvo em buffer."
+                else:
+                    # Se for string (erro)
+                    tool_output = buffer_ou_erro
+                    
+                # Adiciona o resultado da ferramenta ao histórico
+                tool_result_part = {
+                    "functionResponse": {
+                        "name": "grafico_tool",
+                        "response": {"output": tool_output}
+                    }
+                }
+                st.session_state.messages.append({"role": "user", "parts": [tool_result_part]})
+
+            # Segunda chamada: Envia o resultado da ferramenta para o modelo gerar o texto final
+            with st.spinner("💬 Gerando resposta final... (Segunda Chamada)"):
+                response_2 = call_gemini_api(st.session_state.messages, tools=available_tools)
             
-            placeholder.markdown(final_text)
-
-            # Exibe o gráfico se ele foi gerado na primeira iteração (grafico_tool)
-            if 'current_plot_buffer' in st.session_state and st.session_state.current_plot_buffer is not None:
-                st.image(st.session_state.current_plot_buffer, caption=args.get('titulo', 'Gráfico de Análise'), use_column_width=True)
-                st.session_state.current_plot_buffer = None # Limpa após exibição
-
+            # Extrai a resposta final do modelo
+            final_text = response_2["candidates"][0]["content"]["parts"][0]["text"]
+            
+            # Adiciona a resposta final ao histórico e à interface
+            st.session_state.messages.append({"role": "model", "parts": [{"text": final_text}]})
+            
+        # 4.2. Se o modelo respondeu diretamente com texto
+        else:
+            final_text = candidate["content"]["parts"][0]["text"]
             st.session_state.messages.append({"role": "model", "parts": [{"text": final_text}]})
 
-        # --- Lógica de Resposta Direta (Sem Tool Call) ---
-        else:
-            agent_text = first_part.get('text', 'Não foi possível obter resposta do Agente.')
-            placeholder.markdown(agent_text)
-            st.session_state.messages.append({"role": "model", "parts": [{"text": agent_text}]})
+    except Exception as e:
+        st.error(f"Um erro ocorreu ao processar a resposta da API: {e}. Por favor, tente novamente.")
+        return
 
+# --- Interface do Streamlit ---
 
-# --- 3. Streamlit UI (Interface do Usuário) ---
+st.set_page_config(page_title="Agente de Análise de Fraudes (Gemini)", layout="wide")
 
-st.set_page_config(page_title="Agente de Análise de Fraude Gemini", layout="centered")
-st.title("Agente de Análise de Fraude 💳")
+st.title("FraudGuard: Agente de Análise de Fraudes 💳")
+st.markdown("Use o poder do Gemini e pandas para analisar os dados de fraude de cartão de crédito (150MB).")
+st.markdown("---")
 
-# --- Carregamento e Gerenciamento do DataFrame ---
-df_analysis = get_dataframe()
-
-# --- Sidebar para a Chave API ---
-with st.sidebar:
-    st.header("Configuração e Dados")
-    # Tenta ler a chave de 'secrets' (Streamlit Cloud) ou usa string vazia
-    api_key = st.text_input(
-        "Sua Chave API do Gemini", 
-        type="password",
-        value=st.secrets.get("GEMINI_API_KEY", "")
-    )
-    if not api_key:
-        st.warning("Insira a chave API para ativar o Agente.")
-
-    st.markdown("---")
-    
-    st.subheader("Status do DataFrame")
-    if df_analysis is not None:
-        if df_analysis.shape[0] == 100:
-            st.warning("Arquivo CSV **não encontrado**. Usando dados de **DEMONSTRAÇÃO**.")
-        else:
-            st.success("Dados carregados com sucesso.")
-        st.caption(f"Linhas: {df_analysis.shape[0]}, Colunas: {df_analysis.shape[1]}")
-        st.dataframe(df_analysis.head(5), use_container_width=True)
-    else:
-        st.error("Falha ao carregar dados. Verifique a pasta 'data/'.")
-    st.markdown("---")
-    st.info("No Streamlit Cloud, configure o segredo `GEMINI_API_KEY`.")
-
-
-# Inicializa o estado da sessão para o histórico do chat
+# 1. Inicialização do Histórico e Imagem Temporária
 if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "model", "parts": [{"text": "Olá! Eu sou o Agente de Análise de Fraude. Faça uma pergunta sobre as transações, como **'Qual é a média dos valores?'** ou **'Mostre um boxplot da V1.'**"}]}]
-if "current_plot_buffer" not in st.session_state:
-     st.session_state.current_plot_buffer = None
+    st.session_state.messages = []
+if "tool_image" not in st.session_state:
+    st.session_state.tool_image = None
+if "api_key_input" not in st.session_state:
+    st.session_state.api_key_input = ""
 
+# 2. Sidebar para API Key e Info
+with st.sidebar:
+    st.header("Configuração")
+    st.info("Insira sua Chave API do Google Gemini para interagir. Se estiver no Streamlit Cloud, configure-a em 'Secrets'.")
+    
+    # Campo para inserir a chave API manualmente (útil para desenvolvimento local)
+    api_key_input = st.text_input("Sua Chave API Gemini:", type="password", help="A chave será armazenada apenas nesta sessão.")
+    st.session_state.api_key_input = api_key_input
+    
+    st.markdown("---")
+    st.header("Status dos Dados")
+    if df.shape[0] < 1000:
+        st.warning(f"Usando DataFrame de Demonstração (Linhas: {df.shape[0]}).")
+        st.write("Verifique se o link do Dropbox na 'tools.py' está acessível publicamente e se a URL termina em `dl=1`.")
+    else:
+        st.success(f"Dados Carregados com Sucesso! (Linhas: {df.shape[0]} | Colunas: {df.shape[1]})")
 
-# --- Renderiza Histórico de Chat ---
-for message in st.session_state.messages:
-    if message["role"] in ["user", "model"]:
-        with st.chat_message(message["role"]):
-            st.markdown(message["parts"][0]["text"])
+# 3. Exibição do Histórico de Chat
+chat_container = st.container()
+
+with chat_container:
+    # Itera sobre o histórico de mensagens para exibição
+    for message in st.session_state.messages:
+        role = "assistant" if message["role"] == "model" else "user"
+        
+        # Ignora as partes do histórico que são chamadas de função/resposta de ferramenta para o usuário final
+        if "functionCall" in message["parts"][0] or "functionResponse" in message["parts"][0]:
+            continue
             
-            # Reexibe o último gráfico se ele estiver no histórico (após uma resposta do modelo)
-            if message["role"] == "model" and st.session_state.current_plot_buffer is None:
-                # Aqui você poderia adicionar lógica para re-exibir gráficos se necessário,
-                # mas mantemos a exibição simples após a geração.
-                pass 
+        # Exibe mensagens de texto
+        if "text" in message["parts"][0]:
+            with st.chat_message(role):
+                st.markdown(message["parts"][0]["text"])
+
+    # Exibe o gráfico gerado pela ferramenta, se houver
+    if st.session_state.tool_image:
+        with st.chat_message("assistant"):
+            st.image(st.session_state.tool_image, caption="Resultado da Visualização de Dados", use_column_width=True)
+        st.session_state.tool_image = None # Limpa a imagem após exibição
 
 
-# --- Caixa de Input do Usuário ---
-if df_analysis is not None:
-    if prompt := st.chat_input("Pergunte sobre os dados de fraude..."):
-        if not api_key:
-            st.error("Por favor, insira sua Chave API do Gemini na barra lateral para começar.")
-        else:
-            run_conversation(df_analysis, prompt, api_key)
+# 4. Input de Chat
+if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amount?')"):
+    # Limpa a imagem anterior antes de processar a nova pergunta
+    st.session_state.tool_image = None 
+    
+    with chat_container:
+        with st.chat_message("user"):
+            st.markdown(prompt)
+            
+    # Inicia a conversa e o processamento de ferramentas
+    run_conversation(prompt)
+
+# 5. Adiciona o primeiro prompt de boas-vindas se o histórico estiver vazio
+if not st.session_state.messages:
+    st.session_state.messages.append({"role": "model", "parts": [{"text": "Olá! Eu sou o FraudGuard. Tenho acesso ao seu DataFrame de fraudes. Como posso analisar seus dados hoje?"}]})
+    st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
