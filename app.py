@@ -28,6 +28,7 @@ SYSTEM_INSTRUCTION = (
 @st.cache_data(show_spinner="Carregando o DataFrame... (pode levar alguns minutos devido ao tamanho de 150MB)")
 def load_data():
     """Carrega o DataFrame (via URL) usando a função do tools.py."""
+    # Chama a função corrigida do tools.py que tenta carregar via URL pública
     return carregar_dados_ou_demo()
 
 # Carrega o DataFrame no estado da aplicação
@@ -36,26 +37,22 @@ df = load_data()
 
 # --- Funções de Comunicação com a API ---
 
-def call_gemini_api(history: list, tools: list | None = None, is_tool_call: bool = False) -> dict:
+def call_gemini_api(history: list, tools: list | None = None) -> dict:
     """Função central para chamar a API do Gemini com backoff exponencial."""
     
-    # Tenta carregar a API Key dos segredos do Streamlit Cloud
+    # 1. Obtenção da Chave API
     api_key = st.secrets.get("GEMINI_API_KEY", "")
     if not api_key:
-        # Se falhar, tenta carregar do st.session_state (campo de input da sidebar)
         api_key = st.session_state.get("api_key_input", "")
     
     if not api_key:
         st.error("Por favor, insira sua Chave de API Gemini na barra lateral.")
-        return {"candidates": [{"content": {"parts": [{"text": "ERRO: Chave API ausente."}]}}]}
-
-    # O payload deve incluir o histórico de chat e a instrução do sistema
+        return {} # Retorna dicionário vazio para evitar crash
+        
+    # 2. Construção do Payload
     payload = {
         "contents": history,
         "systemInstruction": {"parts": [{"text": SYSTEM_INSTRUCTION}]},
-        "config": { # Configurações para a chamada, incluindo ferramentas
-            "maxOutputTokens": 4096,
-        }
     }
     
     if tools:
@@ -65,19 +62,30 @@ def call_gemini_api(history: list, tools: list | None = None, is_tool_call: bool
         'Content-Type': 'application/json'
     }
 
-    # Lógica de backoff exponencial para lidar com erros de rede/servidor
+    # 3. Lógica de Backoff e Requisição
     max_retries = 5
     for attempt in range(max_retries):
         try:
             # Anexa a chave API diretamente na URL
             response = requests.post(f"{API_URL}?key={api_key}", headers=headers, data=json.dumps(payload))
             response.raise_for_status() # Lança exceção para códigos 4xx/5xx
+
+            # Se a resposta foi bem-sucedida, retorna o JSON
             return response.json()
 
-        except requests.exceptions.RequestException as e:
-            st.warning(f"Erro de comunicação com a API: {e}. Tentando novamente em {2**attempt}s...")
+        except requests.exceptions.HTTPError as http_err:
+            # Captura o erro 400 que você está vendo
+            st.warning(f"Erro de comunicação com a API: {http_err}. Resposta: {response.text}")
             if attempt == max_retries - 1:
-                st.error(f"Falha na comunicação com a API após {max_retries} tentativas.")
+                st.error(f"Falha na comunicação com a API após {max_retries} tentativas. Verifique sua chave ou o formato JSON.")
+                return {}
+            time.sleep(2 ** attempt)
+
+        except requests.exceptions.RequestException as req_err:
+            # Captura outros erros de requisição (timeout, DNS, etc.)
+            st.warning(f"Erro de conexão: {req_err}. Tentando novamente em {2**attempt}s...")
+            if attempt == max_retries - 1:
+                st.error(f"Falha na conexão com a API após {max_retries} tentativas.")
                 return {}
             time.sleep(2 ** attempt)
         
@@ -126,12 +134,17 @@ def run_conversation(prompt: str):
     with st.spinner("🧠 Pensando... (Primeira Chamada)"):
         response_1 = call_gemini_api(st.session_state.messages, tools=available_tools)
     
+    # Se a primeira chamada falhou (retornou dicionário vazio)
+    if not response_1:
+        st.session_state.messages.pop() # Remove a última mensagem do usuário para tentar novamente
+        return
+        
     # 4. Processa a resposta (Texto ou Chamada de Função)
     try:
         candidate = response_1["candidates"][0]
         
         # 4.1. Se o modelo chamou uma função (Function Call)
-        if "functionCall" in candidate["content"]["parts"][0]:
+        if candidate["content"]["parts"] and "functionCall" in candidate["content"]["parts"][0]:
             function_call = candidate["content"]["parts"][0]["functionCall"]
             func_name = function_call["name"]
             func_args = dict(function_call["args"])
@@ -140,18 +153,10 @@ def run_conversation(prompt: str):
             st.session_state.messages.append(candidate["content"])
 
             # Executa a função localmente
+            tool_output = "Erro: Ferramenta não executada."
             if func_name == "consulta_tool":
                 with st.spinner(f"🛠️ Executando consulta: `{func_args.get('codigo_python')}`"):
                     tool_output = consulta_tool(df, func_args["codigo_python"])
-                
-                # Adiciona o resultado da ferramenta ao histórico
-                tool_result_part = {
-                    "functionResponse": {
-                        "name": "consulta_tool",
-                        "response": {"output": tool_output}
-                    }
-                }
-                st.session_state.messages.append({"role": "user", "parts": [tool_result_part]})
                 
             elif func_name == "grafico_tool":
                 with st.spinner(f"📊 Gerando gráfico: {func_args.get('titulo')}"):
@@ -164,20 +169,26 @@ def run_conversation(prompt: str):
                 else:
                     # Se for string (erro)
                     tool_output = buffer_ou_erro
-                    
-                # Adiciona o resultado da ferramenta ao histórico
-                tool_result_part = {
-                    "functionResponse": {
-                        "name": "grafico_tool",
-                        "response": {"output": tool_output}
-                    }
+            
+            # Adiciona o resultado da ferramenta ao histórico
+            tool_result_part = {
+                "functionResponse": {
+                    "name": func_name,
+                    "response": {"output": tool_output}
                 }
-                st.session_state.messages.append({"role": "user", "parts": [tool_result_part]})
+            }
+            st.session_state.messages.append({"role": "user", "parts": [tool_result_part]})
 
             # Segunda chamada: Envia o resultado da ferramenta para o modelo gerar o texto final
             with st.spinner("💬 Gerando resposta final... (Segunda Chamada)"):
                 response_2 = call_gemini_api(st.session_state.messages, tools=available_tools)
             
+            if not response_2:
+                st.session_state.messages.pop() # Remove a mensagem de resultado da ferramenta
+                st.session_state.messages.pop() # Remove a mensagem de chamada da ferramenta
+                st.session_state.messages.pop() # Remove a mensagem original do usuário
+                return
+                
             # Extrai a resposta final do modelo
             final_text = response_2["candidates"][0]["content"]["parts"][0]["text"]
             
@@ -190,7 +201,7 @@ def run_conversation(prompt: str):
             st.session_state.messages.append({"role": "model", "parts": [{"text": final_text}]})
 
     except Exception as e:
-        st.error(f"Um erro ocorreu ao processar a resposta da API: {e}. Por favor, tente novamente.")
+        st.error(f"Um erro ocorreu ao processar a resposta da API: {e}. Isso pode indicar um erro de parse do JSON da API.")
         return
 
 # --- Interface do Streamlit ---
@@ -212,7 +223,7 @@ if "api_key_input" not in st.session_state:
 # 2. Sidebar para API Key e Info
 with st.sidebar:
     st.header("Configuração")
-    st.info("Insira sua Chave API do Google Gemini para interagir. Se estiver no Streamlit Cloud, configure-a em 'Secrets'.")
+    st.info("Insira sua Chave API do Google Gemini. Se estiver no Streamlit Cloud, configure-a em 'Secrets'.")
     
     # Campo para inserir a chave API manualmente (útil para desenvolvimento local)
     api_key_input = st.text_input("Sua Chave API Gemini:", type="password", help="A chave será armazenada apenas nesta sessão.")
