@@ -258,11 +258,11 @@ with chat_container:
                 st.markdown(message["parts"][0]["text"])
 
     # Exibe o gráfico gerado pela ferramenta, se houver
+    # Exibe o gráfico gerado pela ferramenta, se houver
     if st.session_state.tool_image:
         with st.chat_message("assistant"):
-            st.image(st.session_state.tool_image, caption="Resultado da Visualização de Dados", use_column_width=True)
+            st.image(st.session_state.tool_image, caption="Resultado da Visualização de Dados", use_container_width=True)
         st.session_state.tool_image = None # Limpa a imagem após exibição
-
 
 # 4. Input de Chat
 if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amount?')"):
@@ -280,4 +280,5 @@ if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amoun
 if not st.session_state.messages:
     st.session_state.messages.append({"role": "model", "parts": [{"text": "Olá! Eu sou o FraudGuard. Tenho acesso ao seu DataFrame de fraudes. Como posso analisar seus dados hoje?"}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
+
 
