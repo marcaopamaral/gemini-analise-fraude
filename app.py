@@ -163,7 +163,7 @@ def run_conversation(prompt: str):
         return
             
             # Adiciona a chamada de função ao histórico
-            st.session_state.messages.append(candidate["content"])
+            # st.session_state.messages.append(candidate["content"])
 
             # Executa a função localmente
             tool_output = "Erro: Ferramenta não executada."
@@ -292,6 +292,7 @@ if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amoun
 if not st.session_state.messages:
     st.session_state.messages.append({"role": "model", "parts": [{"text": "Olá! Eu sou o FraudGuard. Tenho acesso ao seu DataFrame de fraudes. Como posso analisar seus dados hoje?"}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
+
 
 
 
