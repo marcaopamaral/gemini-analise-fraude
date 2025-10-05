@@ -142,8 +142,8 @@ def run_conversation(prompt: str):
         
     # 4. Processa a resposta (Texto ou Chamada de Função)
     try:
-        ccandidate = response_1["candidates"][0]
-
+        candidate = response_1["candidates"][0]
+        
         # 4.1. Se o modelo chamou uma função (Function Call)
         if candidate["content"]["parts"] and "functionCall" in candidate["content"]["parts"][0]:
             function_call = candidate["content"]["parts"][0]["functionCall"]
@@ -280,4 +280,3 @@ if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amoun
 if not st.session_state.messages:
     st.session_state.messages.append({"role": "model", "parts": [{"text": "Olá! Eu sou o FraudGuard. Tenho acesso ao seu DataFrame de fraudes. Como posso analisar seus dados hoje?"}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
-
