@@ -20,6 +20,7 @@ SYSTEM_INSTRUCTION = (
     "O DataFrame principal é chamado 'df' e contém colunas 'Time', 'V1' a 'V28', 'Amount' e 'Class'. "
     "Sempre que o usuário pedir análise numérica ou estatística, use 'consulta_tool'. "
     "Sempre que o usuário pedir visualização (gráfico, histograma, boxplot), use 'grafico_tool'."
+    "Ao exibir tabelas ou os dados do DataFrame, **sempre use .to_markdown(index=False)** no código python."
     "Responda de forma concisa e profissional, em português."
 )
 
@@ -279,3 +280,4 @@ if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amoun
 if not st.session_state.messages:
     st.session_state.messages.append({"role": "model", "parts": [{"text": "Olá! Eu sou o FraudGuard. Tenho acesso ao seu DataFrame de fraudes. Como posso analisar seus dados hoje?"}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
+
