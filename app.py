@@ -140,73 +140,72 @@ def run_conversation(prompt: str):
         st.session_state.messages.pop() # Remove a última mensagem do usuário para tentar novamente
         return
         
-    # 4. Processa a resposta (Texto ou Chamada de Função)
-    try:
-        candidate = response_1["candidates"][0]
-        
-        # 4.1. Se o modelo chamou uma função (Function Call)
-        if candidate["content"]["parts"] and "functionCall" in candidate["content"]["parts"][0]:
-            function_call = candidate["content"]["parts"][0]["functionCall"]
-            func_name = function_call["name"]
-            func_args = dict(function_call["args"])
-            
-            # Adiciona a chamada de função ao histórico
-            st.session_state.messages.append(candidate["content"])
+    candidate = response_1["candidates"][0]
 
-            # Executa a função localmente
-            tool_output = "Erro: Ferramenta não executada."
-            if func_name == "consulta_tool":
-                with st.spinner(f"🛠️ Executando consulta: `{func_args.get('codigo_python')}`"):
-                    tool_output = consulta_tool(df, func_args["codigo_python"])
-                
-            elif func_name == "grafico_tool":
-                with st.spinner(f"📊 Gerando gráfico: {func_args.get('titulo')}"):
-                    buffer_ou_erro = grafico_tool(df, func_args.get("tipo_grafico"), func_args.get("colunas"), func_args.get("titulo"))
-                
-                if isinstance(buffer_ou_erro, BytesIO):
-                    # Se for BytesIO (gráfico), armazena no estado para exibição
-                    st.session_state.tool_image = buffer_ou_erro
-                    tool_output = "Gráfico gerado com sucesso e salvo em buffer."
-                else:
-                    # Se for string (erro)
-                    tool_output = buffer_ou_erro
-            
-            # Adiciona o resultado da ferramenta ao histórico
-            tool_result_part = {
-                "functionResponse": {
-                    "name": func_name,
-                    "response": {"output": tool_output}
+        # Verifica se o candidato tem a parte de conteúdo
+        if "content" in candidate and "parts" in candidate["content"]:
+            # Processa a resposta (Texto ou Chamada de Função)
+            first_part = candidate["content"]["parts"][0]
+
+            # Se o modelo chamou uma função (Function Call)
+            if "functionCall" in first_part:
+                function_call = first_part["functionCall"]
+                func_name = function_call["name"]
+                func_args = dict(function_call["args"])
+
+                # Adiciona a chamada de função ao histórico
+                st.session_state.messages.append(candidate["content"])
+
+                # Executa a função localmente
+                tool_output = "Erro: Ferramenta não executada."
+                if func_name == "consulta_tool":
+                    with st.spinner(f"🛠️ Executando consulta: `{func_args.get('codigo_python')}`"):
+                        tool_output = consulta_tool(df, func_args["codigo_python"])
+                elif func_name == "grafico_tool":
+                    with st.spinner(f"📊 Gerando gráfico: {func_args.get('titulo')}"):
+                        buffer_ou_erro = grafico_tool(df, func_args.get("tipo_grafico"), func_args.get("colunas"), func_args.get("titulo"))
+                    
+                    if isinstance(buffer_ou_erro, BytesIO):
+                        st.session_state.tool_image = buffer_ou_erro
+                        tool_output = "Gráfico gerado com sucesso e salvo em buffer."
+                    else:
+                        tool_output = buffer_ou_erro
+
+                # Adiciona o resultado da ferramenta ao histórico
+                tool_result_part = {
+                    "functionResponse": {
+                        "name": func_name,
+                        "response": {"output": tool_output}
+                    }
                 }
-            }
-            st.session_state.messages.append({"role": "user", "parts": [tool_result_part]})
+                st.session_state.messages.append({"role": "user", "parts": [tool_result_part]})
 
-            # Segunda chamada: Envia o resultado da ferramenta para o modelo gerar o texto final
-            with st.spinner("💬 Gerando resposta final... (Segunda Chamada)"):
-                response_2 = call_gemini_api(st.session_state.messages, tools=available_tools)
-            
-            if not response_2:
-                st.session_state.messages.pop() # Remove a mensagem de resultado da ferramenta
-                st.session_state.messages.pop() # Remove a mensagem de chamada da ferramenta
-                st.session_state.messages.pop() # Remove a mensagem original do usuário
-                return
+                # Segunda chamada: Envia o resultado da ferramenta para o modelo gerar o texto final
+                with st.spinner("💬 Gerando resposta final... (Segunda Chamada)"):
+                    response_2 = call_gemini_api(st.session_state.messages, tools=available_tools)
+
+                if not response_2:
+                    st.session_state.messages.pop()
+                    st.session_state.messages.pop()
+                    st.session_state.messages.pop()
+                    return
+
+                # Extrai a resposta final do modelo
+                final_text = response_2["candidates"][0]["content"]["parts"][0]["text"]
                 
-            # Extrai a resposta final do modelo
-            final_text = response_2["candidates"][0]["content"]["parts"][0]["text"]
+                # Adiciona a resposta final ao histórico e à interface
+                st.session_state.messages.append({"role": "model", "parts": [{"text": final_text}]})
+                st.rerun()
             
-            # Adiciona a resposta final ao histórico e à interface
-            st.session_state.messages.append({"role": "model", "parts": [{"text": final_text}]})
-            st.rerun() # FORÇA O RERUN PARA EXIBIR A RESPOSTA IMEDIATAMENTE!
-            
-        # 4.2. Se o modelo respondeu diretamente com texto
-        else:
-            final_text = candidate["content"]["parts"][0]["text"]
-            st.session_state.messages.append({"role": "model", "parts": [{"text": final_text}]})
-            st.rerun() # FORÇA O RERUN PARA EXIBIR A RESPOSTA IMEDIATAMENTE!
+            # Se o modelo respondeu diretamente com texto
+            elif "text" in first_part:
+                final_text = first_part["text"]
+                st.session_state.messages.append({"role": "model", "parts": [{"text": final_text}]})
+                st.rerun()
 
     except Exception as e:
         st.error(f"Um erro ocorreu ao processar a resposta da API: {e}. Isso pode indicar um erro de parse do JSON da API.")
         return
-
 # --- Interface do Streamlit ---
 
 st.set_page_config(page_title="Agente de Análise de Fraudes (Gemini)", layout="wide")
@@ -280,6 +279,7 @@ if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amoun
 if not st.session_state.messages:
     st.session_state.messages.append({"role": "model", "parts": [{"text": "Olá! Eu sou o FraudGuard. Tenho acesso ao seu DataFrame de fraudes. Como posso analisar seus dados hoje?"}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
+
 
 
 
