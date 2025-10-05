@@ -150,18 +150,6 @@ def run_conversation(prompt: str):
             func_name = function_call["name"]
             func_args = dict(function_call["args"])
             
-            # ... (Resto do código para executar a ferramenta)
-
-        # 4.2. Se o modelo respondeu diretamente com texto
-        else:
-            final_text = candidate["content"]["parts"][0]["text"]
-            st.session_state.messages.append({"role": "model", "parts": [{"text": final_text}]})
-            st.rerun() # FORÇA O RERUN PARA EXIBIR A RESPOSTA IMEDIATAMENTE!
-
-    except Exception as e:
-        st.error(f"Um erro ocorreu ao processar a resposta da API: {e}. Isso pode indicar um erro de parse do JSON da API.")
-        return
-            
             # Adiciona a chamada de função ao histórico
             st.session_state.messages.append(candidate["content"])
 
@@ -270,11 +258,11 @@ with chat_container:
                 st.markdown(message["parts"][0]["text"])
 
     # Exibe o gráfico gerado pela ferramenta, se houver
-    # Exibe o gráfico gerado pela ferramenta, se houver
     if st.session_state.tool_image:
         with st.chat_message("assistant"):
             st.image(st.session_state.tool_image, caption="Resultado da Visualização de Dados", use_container_width=True)
         st.session_state.tool_image = None # Limpa a imagem após exibição
+
 
 # 4. Input de Chat
 if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amount?')"):
@@ -292,6 +280,7 @@ if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amoun
 if not st.session_state.messages:
     st.session_state.messages.append({"role": "model", "parts": [{"text": "Olá! Eu sou o FraudGuard. Tenho acesso ao seu DataFrame de fraudes. Como posso analisar seus dados hoje?"}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
+
 
 
 
