@@ -27,13 +27,25 @@ SYSTEM_INSTRUCTION = (
 )
 
 # --- Carregamento de Dados (Cache) ---
-# A função de carregamento foi removida e o DataFrame agora será carregado dinamicamente por uma ferramenta.
 # Inicializamos o DataFrame como None no início da sessão.
 df = None
 
+# NOVO: Inicializa a chave para armazenar a mensagem de erro do carregamento de dados
+if "data_load_error" not in st.session_state:
+    st.session_state.data_load_error = None
+
 # Se o DataFrame ainda não foi carregado na sessão, carregue o de demonstração
-if "df" not in st.session_state or st.session_state.df is None:
-    st.session_state.df = carregar_dados_ou_demo()
+# CORRIGIDO: Garante que só um DataFrame é armazenado, caso contrário armazena a mensagem de erro.
+if "df" not in st.session_state or st.session_state.df is None or not isinstance(st.session_state.df, pd.DataFrame): 
+    loaded_data = carregar_dados_ou_demo()
+    
+    if isinstance(loaded_data, pd.DataFrame):
+        st.session_state.df = loaded_data
+        st.session_state.data_load_error = None # Limpa o erro se o carregamento foi bem-sucedido
+    else:
+        # Se for um erro (string), armazene 'None' para evitar o AttributeError e guarde o erro separadamente
+        st.session_state.df = None
+        st.session_state.data_load_error = loaded_data # Armazena a mensagem de erro
 
 # --- Funções de Comunicação com a API ---
 
@@ -175,11 +187,16 @@ def run_conversation(prompt: str):
             if func_name == "carregar_dados":
                 with st.spinner("⏳ Carregando dados da URL..."):
                     url = func_args.get("url")
-                    st.session_state.df = carregar_dados_dinamicamente(url) # Carrega o novo DataFrame
-                    if isinstance(st.session_state.df, pd.DataFrame):
+                    loaded_data = carregar_dados_dinamicamente(url) # Carrega o novo DataFrame
+                    
+                    if isinstance(loaded_data, pd.DataFrame):
+                        st.session_state.df = loaded_data
+                        st.session_state.data_load_error = None # Limpa o erro anterior
                         tool_output = f"Dados carregados com sucesso! Linhas: {st.session_state.df.shape[0]}, Colunas: {st.session_state.df.shape[1]}."
                     else:
-                        tool_output = st.session_state.df # É uma string de erro
+                        st.session_state.df = None # Define como None se houve erro
+                        st.session_state.data_load_error = loaded_data # Armazena o erro
+                        tool_output = loaded_data # É uma string de erro
             # --- Fim do bloco ---
             
             elif func_name == "consulta_tool":
@@ -254,6 +271,7 @@ if "tool_image" not in st.session_state:
 if "api_key_input" not in st.session_state:
     st.session_state.api_key_input = ""
 
+
 # 2. Sidebar para API Key e Info
 with st.sidebar:
     st.header("Configuração")
@@ -265,14 +283,29 @@ with st.sidebar:
     
     st.markdown("---")
     st.header("Status dos Dados")
-    # Altera a verificação para o estado da sessão
-    if "df" not in st.session_state or st.session_state.df is None or st.session_state.df.empty:
+    
+    # CORRIGIDO: Lógica segura para verificar o status do DataFrame
+    is_df_loaded_and_valid = ("df" in st.session_state and 
+                              st.session_state.df is not None and
+                              isinstance(st.session_state.df, pd.DataFrame))
+
+    if st.session_state.data_load_error:
+        # 1. Exibe o erro se o carregamento falhou
+        st.error("Nenhum DataFrame carregado ou houve um erro no carregamento.")
+        st.info("Por favor, forneça uma URL de um arquivo CSV, ou use a demo padrão.")
+        st.warning(f"Detalhe do Erro: {st.session_state.data_load_error}")
+    
+    elif not is_df_loaded_and_valid or st.session_state.df.empty:
+        # 2. Exibe status de erro geral se não é válido/está vazio
         st.error("Nenhum DataFrame carregado.")
         st.info("Por favor, forneça uma URL de um arquivo CSV, ou use a demo padrão.")
+
     elif st.session_state.df.shape[0] < 1000:
+        # 3. Exibe status de demonstração
         st.warning(f"Usando DataFrame de Demonstração (Linhas: {st.session_state.df.shape[0]}).")
         st.write("Você pode fornecer uma URL de um novo arquivo CSV para análise.")
     else:
+        # 4. Exibe status de sucesso
         st.success(f"Dados Carregados com Sucesso! (Linhas: {st.session_state.df.shape[0]} | Colunas: {st.session_state.df.shape[1]})")
 
 # 3. Exibição do Histórico de Chat
@@ -313,23 +346,25 @@ if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amoun
 
 # 5. Adiciona o primeiro prompt de boas-vindas se o histórico estiver vazio
 if not st.session_state.messages:
-    is_demo_df = st.session_state.df is not None and st.session_state.df.shape[0] < 1000
+    is_demo_df = st.session_state.df is not None and isinstance(st.session_state.df, pd.DataFrame) and st.session_state.df.shape[0] < 1000
     
-    # MUDANÇA: Usando Markdown puro com linhas em branco para garantir a separação em 4 linhas.
+    # NOVO: Mensagens formatadas com linhas em branco para garantir 4 linhas no chat.
     if is_demo_df:
         welcome_message = """Olá! Eu sou um agente desenvolvido por Marcos para o desafio I2A2.
-        
+
 **Para testes uso dados de demonstração criado por mim.**
 
-Se quiser outro arquivo, me informe o caminho pelo comando: **Análise este arquivo CSV:** `https://link-para-o-seu-arquivo.csv`"""
+Se quiser outro arquivo, me informe o caminho pelo comando:
+
+**Análise este arquivo CSV:** `https://link-para-o-seu-arquivo.csv`"""
     else:
         welcome_message = """Olá! Eu sou um agente desenvolvido por Marcos para o desafio I2A2.
-        
+
 **Uso dados do arquivo `creditcard.csv`.**
 
-Se quiser outro arquivo, me informe o caminho pelo comando: **Análise este arquivo CSV:** `https://link-para-o-seu-arquivo.csv`"""
+Se quiser outro arquivo, me informe o caminho pelo comando:
+
+**Análise este arquivo CSV:** `https://link-para-o-seu-arquivo.csv`"""
     
     st.session_state.messages.append({"role": "model", "parts": [{"text": welcome_message}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
-
-
