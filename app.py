@@ -316,11 +316,16 @@ if not st.session_state.messages:
     if is_demo_df:
         welcome_message = """Olá! Eu sou um agente desenvolvido por Marcos para o desafio I2A2.
 
-**Para testes uso dados de demonstração criado por mim.**
+**Uso dados de arquivo csv de demonstração.**
 
-Se quiser outro arquivo, me informe o caminho pelo comando:
+Se quiser outro arquivo, me informe o caminho. Veja exemplos de instruções
 
-**Análise este arquivo CSV:** `https://link-para-o-seu-arquivo.csv`"""
+Instrução direta: Carregue e analise o arquivo CSV deste link: **https://seusite.com/dados.csv**
+
+Comando explícito: Use esta URL para os dados: **https://servidor.net/fraudes_junho.csv**
+
+Contextualizado: Quero analisar os dados de fraude de junho. O arquivo está aqui: **https://cloud.storage/fraudes.csv**"""
+        
     else:
         welcome_message = """Olá! Eu sou um agente desenvolvido por Marcos para o desafio I2A2.
 
