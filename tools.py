@@ -7,9 +7,8 @@ from io import BytesIO
 import requests
 
 # Variável global para a URL do arquivo grande (150MB)
-# ATENÇÃO: Substitua ESTE link com o link RAW do seu arquivo ZIP no GitHub ou outro serviço.
+# ATENÇÃO: Verifique se o seu arquivo ZIPado no GitHub ou outro serviço é um link RAW de download direto.
 PUBLIC_CSV_URL = "https://raw.githubusercontent.com/marcaopamaral/gemini-analise-fraude/data/creditcard.zip" 
-# Nota: Você deve trocar a extensão no link do GitHub para .zip e usar um link RAW para download direto.
 
 def carregar_dados_dinamicamente(url: str):
     """Carrega um DataFrame a partir de uma URL fornecida (suporta .zip)."""
@@ -22,7 +21,7 @@ def carregar_dados_dinamicamente(url: str):
     try:
         print(f"[INFO] Tentando carregar dados da URL: {url}")
         
-        # O Pandas detecta 'compression' automaticamente, mas forçamos para ZIP se a URL terminar em .zip
+        # O Pandas lida com ZIP se a URL terminar em .zip e especificarmos o nome interno.
         if url.lower().endswith('.zip'):
             df_retorno = pd.read_csv(
                 url, 
@@ -44,12 +43,13 @@ def carregar_dados_ou_demo():
     GENERIC_PLACEHOLDER_URL = "https://example.com/seu_arquivo_publico_de_150MB.csv"
 
     if PUBLIC_CSV_URL and PUBLIC_CSV_URL != GENERIC_PLACEHOLDER_URL:
-        # A lógica de carregamento dinâmico já lida com ZIP/CSV e retorna o DataFrame ou a string de erro
+        # Tenta carregar usando a URL pública (que pode ser ZIP)
         df_retorno = carregar_dados_dinamicamente(PUBLIC_CSV_URL)
         if isinstance(df_retorno, pd.DataFrame):
             print(f"[INFO] Dados carregados com sucesso via URL (função de inicialização).")
             return df_retorno
         else:
+            # Se for uma string de erro, prossegue para o carregamento local/demo
             print(f"[AVISO] Falha ao carregar dados da URL: {df_retorno}. Recorrendo ao carregamento local/demo.")
             
     file_path = 'data/creditcard.csv'
@@ -63,6 +63,7 @@ def carregar_dados_ou_demo():
 
     print(f"[AVISO] Arquivo não encontrado ou falha de URL. Criando DataFrame de demonstração.")
     
+    # Criação do DataFrame de demonstração
     data = {
         'Time': range(100),
         'Amount': [10 + i % 100 for i in range(100)],
@@ -182,4 +183,16 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
         plt.tight_layout()
         
         buffer = BytesIO()
-        plt.savefig(buffer, format='
+        plt.savefig(buffer, format='png')
+        buffer.seek(0)
+        
+        plt.close()
+        
+        return buffer 
+
+    except KeyError as e:
+        plt.close()
+        return f"Erro: Coluna não encontrada: {e}. Colunas disponíveis: {df.columns.tolist()}"
+    except Exception as e:
+        plt.close()
+        return f"Erro inesperado ao gerar o gráfico: {e}"
