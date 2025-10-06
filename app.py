@@ -320,12 +320,11 @@ if not st.session_state.messages:
 
 Se quiser outro arquivo, me informe o caminho. Veja exemplos de instruções
 
-Instrução direta: Carregue e analise o arquivo CSV deste link: **https://seusite.com/dados.csv**
+Instrução direta: Carregue e analise o arquivo CSV deste link: `https://seusite.com/dados.csv`
 
-Comando explícito: Use esta URL para os dados: **https://servidor.net/fraudes_junho.csv**
+Comando explícito: Use esta URL para os dados: `https://servidor.net/fraudes_junho.csv`
 
-Contextualizado: Quero analisar os dados de fraude de junho. O arquivo está aqui: **https://cloud.storage/fraudes.csv**"""
-        
+Contextualizado: Quero analisar os dados de fraude de junho. O arquivo está aqui: `https://cloud.storage/fraudes.csv`"""        
     else:
         welcome_message = """Olá! Eu sou um agente desenvolvido por Marcos para o desafio I2A2.
 
@@ -341,5 +340,6 @@ Contextualizado: Quero analisar os dados de fraude de junho. O arquivo está aqu
  
     st.session_state.messages.append({"role": "model", "parts": [{"text": welcome_message}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
+
 
 
