@@ -10,26 +10,28 @@ import requests
 PUBLIC_CSV_URL = "https://www.dropbox.com/scl/fi/ibuflwf3bvau3a624f3ep/creditcard.csv?rlkey=duuiekt9cskkoya6rf3opokht&st=n1b9m26x&dl=1"
 
 def carregar_dados_dinamicamente(url: str):
-    """Carrega um DataFrame a partir de uma URL fornecida."""
+    """Carrega um DataFrame a partir de uma URL fornecida, suportando compressão (ZIP, GZ, etc.)."""
     if not url:
         return "Erro: URL não fornecida."
     try:
         print(f"[INFO] Tentando carregar dados da URL: {url}")
-        df_retorno = pd.read_csv(url)
+        # AQUI: Adicionado compression='infer'
+        df_retorno = pd.read_csv(url, compression='infer')
         print(f"[INFO] Dados carregados com sucesso da URL.")
         return df_retorno
     except Exception as e:
         return f"Erro ao carregar dados da URL ({e}). Verifique o link e a acessibilidade."
 
 def carregar_dados_ou_demo():
-    """Tenta carregar o creditcard.csv via URL pública ou cria um DataFrame de demonstração."""
+    """Tenta carregar o creditcard.csv via URL pública, localmente, ou cria um DataFrame de demonstração. Suporta compressão."""
     
     GENERIC_PLACEHOLDER_URL = "https://example.com/seu_arquivo_publico_de_150MB.csv"
 
     if PUBLIC_CSV_URL and PUBLIC_CSV_URL != GENERIC_PLACEHOLDER_URL:
         try:
             print(f"[INFO] Tentando carregar dados da URL: {PUBLIC_CSV_URL}")
-            df_retorno = pd.read_csv(PUBLIC_CSV_URL)
+            # AQUI: Adicionado compression='infer'
+            df_retorno = pd.read_csv(PUBLIC_CSV_URL, compression='infer')
             print(f"[INFO] Dados carregados com sucesso via URL.")
             return df_retorno
         except Exception as e:
@@ -38,7 +40,8 @@ def carregar_dados_ou_demo():
     file_path = 'data/creditcard.csv'
     if os.path.exists(file_path):
         try:
-            df_retorno = pd.read_csv(file_path)
+            # O carregamento local também deve suportar a compressão
+            df_retorno = pd.read_csv(file_path, compression='infer')
             print(f"[INFO] Dados carregados com sucesso de '{file_path}' (Ambiente Local).")
             return df_retorno
         except Exception as e:
