@@ -26,7 +26,6 @@ SYSTEM_INSTRUCTION = (
 )
 
 # --- Carregamento de Dados (Cache) ---
-# A função de carregamento foi removida e o DataFrame agora será carregado dinamicamente por uma ferramenta.
 # Inicializamos o DataFrame como None no início da sessão.
 df = None
 
@@ -262,10 +261,17 @@ with st.sidebar:
     
     st.markdown("---")
     st.header("Status dos Dados")
-    #if "df" not in st.session_state or st.session_state.df is None or st.session_state.df.empty:
-    st.error("Nenhum DataFrame carregado.")
-    st.info("Por favor, forneça uma URL de um arquivo CSV, ou use a demo padrão.")
-elif st.session_state.df.shape[0] < 1000:
+    
+    # CORREÇÃO FINAL DO BLOCO DE VERIFICAÇÃO DE DATAFRAME
+    # O if/elif/else está corretamente indentado dentro do with st.sidebar:
+    is_df_loaded = "df" in st.session_state and st.session_state.df is not None
+    
+    if not is_df_loaded:
+        st.error("Nenhum DataFrame carregado.")
+        st.info("Por favor, forneça uma URL de um arquivo CSV, ou use a demo padrão.")
+    elif st.session_state.df.empty:
+        st.error("DataFrame carregado, mas está vazio (0 linhas).")
+    elif st.session_state.df.shape[0] < 1000:
         st.warning(f"Usando DataFrame de Demonstração (Linhas: {st.session_state.df.shape[0]}).")
         st.write("Você pode fornecer uma URL de um novo arquivo CSV para análise.")
     else:
@@ -311,7 +317,7 @@ if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amoun
 if not st.session_state.messages:
     is_demo_df = st.session_state.df is not None and isinstance(st.session_state.df, pd.DataFrame) and st.session_state.df.shape[0] < 1000
     
-    # NOVO: Mensagens formatadas com linhas em branco para garantir 4 linhas no chat.
+    # Mensagens formatadas com backticks para a URL
     if is_demo_df:
         welcome_message = """Olá! Eu sou um agente desenvolvido por Marcos para o desafio I2A2.
 
@@ -339,7 +345,3 @@ Contextualizado: Quero analisar os dados de fraude de junho. O arquivo está aqu
  
     st.session_state.messages.append({"role": "model", "parts": [{"text": welcome_message}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
-
-
-
-
