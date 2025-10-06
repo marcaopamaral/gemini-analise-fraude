@@ -310,5 +310,12 @@ if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amoun
 
 # 5. Adiciona o primeiro prompt de boas-vindas se o histórico estiver vazio
 if not st.session_state.messages:
-    st.session_state.messages.append({"role": "model", "parts": [{"text": "Olá! Eu sou o FraudGuard. Tenho acesso ao seu DataFrame de fraudes. Como posso analisar seus dados hoje?"}]})
+    is_demo_df = st.session_state.df is not None and st.session_state.df.shape[0] < 1000
+    
+    if is_demo_df:
+        welcome_message = "Olá! Eu sou o FraudGuard. No momento, estou usando um conjunto de dados de demonstração. Se você quiser, pode me fornecer a URL de um arquivo CSV para começar a análise."
+    else:
+        welcome_message = "Olá! Eu sou o FraudGuard. Tenho acesso ao seu DataFrame de fraudes. Como posso analisar seus dados hoje?"
+        
+    st.session_state.messages.append({"role": "model", "parts": [{"text": welcome_message}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
