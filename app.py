@@ -133,9 +133,6 @@ def run_conversation(prompt: str):
                     }
                 }
             ]
-                        
-        }
-    ]
 
     # 3. Primeira chamada: Envia a pergunta e o histórico para ver se o modelo usa a ferramenta
     with st.spinner("🧠 Pensando... (Primeira Chamada)"):
@@ -291,6 +288,7 @@ if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amoun
 if not st.session_state.messages:
     st.session_state.messages.append({"role": "model", "parts": [{"text": "Olá! Eu sou o FraudGuard. Tenho acesso ao seu DataFrame de fraudes. Como posso analisar seus dados hoje?"}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
+
 
 
 
