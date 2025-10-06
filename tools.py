@@ -7,16 +7,32 @@ from io import BytesIO
 import requests
 
 # Variável global para a URL do arquivo grande (150MB)
-# ATENÇÃO: Substitua ESTE link com o link RAW do seu arquivo no GitHub.
-PUBLIC_CSV_URL = "https://raw.githubusercontent.com/marcaopamaral/gemini-analise-fraude/data/creditcard.csv"
+# ATENÇÃO: Substitua ESTE link com o link RAW do seu arquivo ZIP no GitHub ou outro serviço.
+PUBLIC_CSV_URL = "https://raw.githubusercontent.com/marcaopamaral/gemini-analise-fraude/data/creditcard.zip" 
+# Nota: Você deve trocar a extensão no link do GitHub para .zip e usar um link RAW para download direto.
 
 def carregar_dados_dinamicamente(url: str):
-    """Carrega um DataFrame a partir de uma URL fornecida."""
+    """Carrega um DataFrame a partir de uma URL fornecida (suporta .zip)."""
     if not url:
         return "Erro: URL não fornecida."
+    
+    # Nome do arquivo CSV dentro do ZIP. Ajuste se o nome for diferente!
+    nome_interno_do_csv = 'creditcard.csv' 
+    
     try:
         print(f"[INFO] Tentando carregar dados da URL: {url}")
-        df_retorno = pd.read_csv(url)
+        
+        # O Pandas detecta 'compression' automaticamente, mas forçamos para ZIP se a URL terminar em .zip
+        if url.lower().endswith('.zip'):
+            df_retorno = pd.read_csv(
+                url, 
+                compression='zip', 
+                # Força a leitura do CSV com o nome especificado dentro do ZIP
+                filepath_or_buffer=nome_interno_do_csv 
+            )
+        else:
+            df_retorno = pd.read_csv(url)
+            
         print(f"[INFO] Dados carregados com sucesso da URL.")
         return df_retorno
     except Exception as e:
@@ -28,13 +44,13 @@ def carregar_dados_ou_demo():
     GENERIC_PLACEHOLDER_URL = "https://example.com/seu_arquivo_publico_de_150MB.csv"
 
     if PUBLIC_CSV_URL and PUBLIC_CSV_URL != GENERIC_PLACEHOLDER_URL:
-        try:
-            print(f"[INFO] Tentando carregar dados da URL: {PUBLIC_CSV_URL}")
-            df_retorno = pd.read_csv(PUBLIC_CSV_URL)
-            print(f"[INFO] Dados carregados com sucesso via URL.")
+        # A lógica de carregamento dinâmico já lida com ZIP/CSV e retorna o DataFrame ou a string de erro
+        df_retorno = carregar_dados_dinamicamente(PUBLIC_CSV_URL)
+        if isinstance(df_retorno, pd.DataFrame):
+            print(f"[INFO] Dados carregados com sucesso via URL (função de inicialização).")
             return df_retorno
-        except Exception as e:
-            print(f"[AVISO] Falha ao carregar dados da URL ({e}). Recorrendo ao carregamento local/demo.")
+        else:
+            print(f"[AVISO] Falha ao carregar dados da URL: {df_retorno}. Recorrendo ao carregamento local/demo.")
             
     file_path = 'data/creditcard.csv'
     if os.path.exists(file_path):
@@ -65,23 +81,15 @@ def carregar_dados_ou_demo():
 def consulta_tool(df: pd.DataFrame, codigo_python: str) -> str:
     """
     Executa um trecho de código Python no DataFrame 'df' e retorna o resultado formatado.
-    
-    Args:
-        df: O DataFrame de dados.
-        codigo_python: O código Python (como string) para executar no DataFrame 'df'.
-        
-    Returns:
-        O resultado da execução do código como uma string.
     """
-    if df is None:
-        return "Erro: O DataFrame não foi carregado corretamente."
+    if df is None or not isinstance(df, pd.DataFrame):
+        return "Erro: O DataFrame não foi carregado corretamente para consulta."
         
     stdout_buffer = io.StringIO()
     sys.stdout = stdout_buffer
 
     try:
         exec_locals = {'df': df, 'pd': pd}
-        # A instrução exec é usada para executar o código Python fornecido na string
         exec(f'result = {codigo_python}', {'pd': pd, 'df': df}, exec_locals)
         
         result = exec_locals.get('result')
@@ -108,26 +116,9 @@ def consulta_tool(df: pd.DataFrame, codigo_python: str) -> str:
 def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str) -> BytesIO | str:
     """
     Gera um gráfico com base no tipo especificado e retorna o buffer de memória da imagem (BytesIO).
-    
-    Args:
-        df: O DataFrame de dados.
-        tipo_grafico: Tipo de gráfico ('hist', 'box', 'scatter', 'bar', 'pie', 'line', 'area').
-        colunas: Lista de colunas a serem plotadas.
-        titulo: Título do gráfico.
-        
-    Returns:
-        Um objeto BytesIO contendo o PNG do gráfico, ou uma string de erro.
     """
-    # A verificação de que 'df' é um DataFrame válido deve ser feita
-    # por quem chama a função, mas incluímos uma verificação básica.
-    if df is None:
+    if df is None or not isinstance(df, pd.DataFrame):
         return "Erro: O DataFrame não foi carregado corretamente para gerar o gráfico."
-    
-    # Adicionamos uma verificação extra para garantir que 'df' é um objeto DataFrame,
-    # caso 'carregar_dados_ou_demo' tenha retornado uma string de erro.
-    if not isinstance(df, pd.DataFrame):
-        return f"Erro: O objeto de dados não é um DataFrame, mas sim: {type(df)}. Recarregue os dados."
-
 
     try:
         plt.figure(figsize=(10, 6))
@@ -139,7 +130,6 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
             plt.ylabel('Frequência')
 
         elif tipo_grafico == 'box' and len(colunas) == 1:
-            # Boxplot específico para análise de fraude (por coluna 'Class')
             df.boxplot(column=colunas[0], by='Class', grid=False, figsize=(8, 6))
             plt.suptitle('') 
             plt.title(f'Boxplot de {colunas[0]} por Classe (0=Normal, 1=Fraude)')
@@ -148,7 +138,6 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
             
         elif tipo_grafico == 'scatter' and len(colunas) == 2:
             col_x, col_y = colunas[0], colunas[1]
-            # Scatter plot específico para análise de fraude (colorido por 'Class')
             plt.scatter(df[col_x], df[col_y], c=df['Class'], cmap='coolwarm', alpha=0.6)
             plt.title(f'Dispersão de {col_x} vs {col_y} (Cor por Fraude)')
             plt.xlabel(col_x)
@@ -156,7 +145,6 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
             plt.colorbar(label='Class (0=Normal, 1=Fraude)')
             
         elif tipo_grafico == 'bar' and colunas[0].lower() == 'class':
-            # Gráfico de barras de contagem de classes (Fraude vs. Normal)
             fraudes = df['Class'].value_counts()
             fraudes.plot(kind='bar', color=['skyblue', 'salmon'])
             plt.title('Contagem de Transações por Classe')
@@ -165,7 +153,6 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
             plt.xticks(rotation=0)
         
         elif tipo_grafico == 'pie' and len(colunas) == 1 and colunas[0].lower() == 'class':
-            # Gráfico de pizza de distribuição de classes
             contagem_classe = df['Class'].value_counts()
             labels = ['Normal', 'Fraude']
             plt.pie(contagem_classe, labels=labels, autopct='%1.1f%%', startangle=140, colors=['#66b3ff', '#ff9999'])
@@ -195,17 +182,4 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
         plt.tight_layout()
         
         buffer = BytesIO()
-        plt.savefig(buffer, format='png')
-        buffer.seek(0)
-        
-        plt.close()
-        
-        return buffer 
-
-    except KeyError as e:
-        plt.close()
-        return f"Erro: Coluna não encontrada: {e}. Colunas disponíveis: {df.columns.tolist()}"
-    except Exception as e:
-        plt.close()
-        return f"Erro inesperado ao gerar o gráfico: {e}"
-
+        plt.savefig(buffer, format='
