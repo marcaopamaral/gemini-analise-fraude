@@ -41,6 +41,9 @@ df = load_data()
 def call_gemini_api(history: list, tools: list | None = None) -> dict:
     """Função central para chamar a API do Gemini com backoff exponencial."""
     
+    # Certifique-se de que a instrução do sistema está disponível
+    global SYSTEM_INSTRUCTION
+    
     # 1. Obtenção da Chave API
     api_key = st.secrets.get("GEMINI_API_KEY", "")
     if not api_key:
@@ -48,7 +51,7 @@ def call_gemini_api(history: list, tools: list | None = None) -> dict:
     
     if not api_key:
         st.error("Por favor, insira sua Chave de API Gemini na barra lateral.")
-        return {} # Retorna dicionário vazio para evitar crash
+        return {}
         
     # 2. Construção do Payload
     payload = {
@@ -69,19 +72,25 @@ def call_gemini_api(history: list, tools: list | None = None) -> dict:
         try:
             # Anexa a chave API diretamente na URL
             response = requests.post(f"{API_URL}?key={api_key}", headers=headers, data=json.dumps(payload))
-            response.raise_for_status() # Lança exceção para códigos 4xx/5xx
+            response.raise_for_status()
 
-            # Se a resposta foi bem-sucedida, retorna o JSON
             return response.json()
 
         except requests.exceptions.HTTPError as http_err:
-            # Captura o erro 400 que você está vendo
             st.warning(f"Erro de comunicação com a API: {http_err}. Resposta: {response.text}")
             if attempt == max_retries - 1:
                 st.error(f"Falha na comunicação com a API após {max_retries} tentativas. Verifique sua chave ou o formato JSON.")
                 return {}
             time.sleep(2 ** attempt)
 
+        except requests.exceptions.RequestException as req_err:
+            st.warning(f"Erro de conexão: {req_err}. Tentando novamente em {2**attempt}s...")
+            if attempt == max_retries - 1:
+                st.error(f"Falha na conexão com a API após {max_retries} tentativas.")
+                return {}
+            time.sleep(2 ** attempt)
+        
+    return {}
         except requests.exceptions.RequestException as req_err:
             # Captura outros erros de requisição (timeout, DNS, etc.)
             st.warning(f"Erro de conexão: {req_err}. Tentando novamente em {2**attempt}s...")
@@ -293,6 +302,7 @@ if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amoun
 if not st.session_state.messages:
     st.session_state.messages.append({"role": "model", "parts": [{"text": "Olá! Eu sou o FraudGuard. Tenho acesso ao seu DataFrame de fraudes. Como posso analisar seus dados hoje?"}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
+
 
 
 
