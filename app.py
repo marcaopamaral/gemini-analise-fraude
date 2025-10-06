@@ -313,9 +313,10 @@ if not st.session_state.messages:
     is_demo_df = st.session_state.df is not None and st.session_state.df.shape[0] < 1000
     
     if is_demo_df:
-        welcome_message = "Olá! Eu sou o FraudGuard. No momento, estou usando um conjunto de dados de demonstração. Se você quiser, pode me fornecer a URL de um arquivo CSV para começar a análise."
+        welcome_message = "Olá! Eu sou o FraudGuard. No momento, estou usando um conjunto de dados de demonstração criado por mim. Se você quiser, pode me fornecer a URL de um arquivo CSV, tal como Analise este arquivo CSV: https://link-para-o-seu-arquivo.csv para começar a análise."
     else:
-        welcome_message = "Olá! Eu sou o FraudGuard. Tenho acesso ao seu DataFrame de fraudes. Como posso analisar seus dados hoje?"
+        welcome_message = "Olá! Eu sou o FraudGuard. Tenho acesso ao DataFrame de fraudes chamado creditcard.csv. Posso analisar os dados por ele?  Se você quiser, pode me fornecer a URL de um arquivo CSV através do comando Analise este arquivo CSV: https://link-para-o-seu-arquivo.csv link para começar a análise."
         
     st.session_state.messages.append({"role": "model", "parts": [{"text": welcome_message}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
+
