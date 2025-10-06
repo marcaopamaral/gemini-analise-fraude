@@ -326,7 +326,7 @@ Se quiser outro arquivo, me informe o caminho pelo comando:
 
 **Uso dados do arquivo `creditcard.csv`.**
 
-Se quiser outro arquivo, me informe o caminho. Veja execplos de instruções
+Se quiser outro arquivo, me informe o caminho. Veja exemplos de instruções
 
 Instrução direta: Carregue e analise o arquivo CSV deste link: **https://seusite.com/dados.csv**
 
