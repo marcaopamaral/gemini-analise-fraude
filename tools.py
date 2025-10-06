@@ -7,8 +7,8 @@ from io import BytesIO
 import requests
 
 # Variável global para a URL do arquivo grande (150MB)
-# LINK ATUALIZADO: Direcionando para o arquivo creditcard.csv no GitHub RAW.
-PUBLIC_CSV_URL = "https://raw.githubusercontent.com/marcaopamaral/gemini-analise-fraude/cc26b5bb6629a675f1d17ca6491290d13349e3c6/data/creditcard.csv"
+# LINK FINAL: Aponta para a branch 'main' do GitHub, mais estável que o hash de commit.
+PUBLIC_CSV_URL = "https://raw.githubusercontent.com/marcaopamaral/gemini-analise-fraude/main/data/creditcard.csv"
 
 def carregar_dados_dinamicamente(url: str):
     """Carrega um DataFrame a partir de uma URL fornecida, suportando compressão (ZIP, GZ, etc.)."""
@@ -28,7 +28,7 @@ def carregar_dados_ou_demo():
     
     GENERIC_PLACEHOLDER_URL = "https://example.com/seu_arquivo_publico_de_150MB.csv"
 
-    # 1. TENTATIVA DE URL (Agora usa o GitHub)
+    # 1. TENTATIVA DE URL (GitHub)
     if PUBLIC_CSV_URL and PUBLIC_CSV_URL != GENERIC_PLACEHOLDER_URL:
         try:
             print(f"[INFO] Tentando carregar dados da URL: {PUBLIC_CSV_URL}")
