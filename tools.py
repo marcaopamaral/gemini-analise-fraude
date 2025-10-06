@@ -7,31 +7,15 @@ from io import BytesIO
 import requests
 
 # Variável global para a URL do arquivo grande (150MB)
-# ATENÇÃO: Verifique se o seu arquivo ZIPado no GitHub ou outro serviço é um link RAW de download direto.
-PUBLIC_CSV_URL = "https://raw.githubusercontent.com/marcaopamaral/gemini-analise-fraude/data/creditcard.zip" 
+PUBLIC_CSV_URL = "https://www.dropbox.com/scl/fi/ibuflwf3bvau3a624f3ep/creditcard.csv?rlkey=duuiekt9cskkoya6rf3opokht&st=n1b9m26x&dl=1"
 
 def carregar_dados_dinamicamente(url: str):
-    """Carrega um DataFrame a partir de uma URL fornecida (suporta .zip)."""
+    """Carrega um DataFrame a partir de uma URL fornecida."""
     if not url:
         return "Erro: URL não fornecida."
-    
-    # Nome do arquivo CSV dentro do ZIP. Ajuste se o nome for diferente!
-    nome_interno_do_csv = 'creditcard.csv' 
-    
     try:
         print(f"[INFO] Tentando carregar dados da URL: {url}")
-        
-        # O Pandas lida com ZIP se a URL terminar em .zip e especificarmos o nome interno.
-        if url.lower().endswith('.zip'):
-            df_retorno = pd.read_csv(
-                url, 
-                compression='zip', 
-                # Força a leitura do CSV com o nome especificado dentro do ZIP
-                filepath_or_buffer=nome_interno_do_csv 
-            )
-        else:
-            df_retorno = pd.read_csv(url)
-            
+        df_retorno = pd.read_csv(url)
         print(f"[INFO] Dados carregados com sucesso da URL.")
         return df_retorno
     except Exception as e:
@@ -43,14 +27,13 @@ def carregar_dados_ou_demo():
     GENERIC_PLACEHOLDER_URL = "https://example.com/seu_arquivo_publico_de_150MB.csv"
 
     if PUBLIC_CSV_URL and PUBLIC_CSV_URL != GENERIC_PLACEHOLDER_URL:
-        # Tenta carregar usando a URL pública (que pode ser ZIP)
-        df_retorno = carregar_dados_dinamicamente(PUBLIC_CSV_URL)
-        if isinstance(df_retorno, pd.DataFrame):
-            print(f"[INFO] Dados carregados com sucesso via URL (função de inicialização).")
+        try:
+            print(f"[INFO] Tentando carregar dados da URL: {PUBLIC_CSV_URL}")
+            df_retorno = pd.read_csv(PUBLIC_CSV_URL)
+            print(f"[INFO] Dados carregados com sucesso via URL.")
             return df_retorno
-        else:
-            # Se for uma string de erro, prossegue para o carregamento local/demo
-            print(f"[AVISO] Falha ao carregar dados da URL: {df_retorno}. Recorrendo ao carregamento local/demo.")
+        except Exception as e:
+            print(f"[AVISO] Falha ao carregar dados da URL ({e}). Recorrendo ao carregamento local/demo.")
             
     file_path = 'data/creditcard.csv'
     if os.path.exists(file_path):
@@ -63,7 +46,6 @@ def carregar_dados_ou_demo():
 
     print(f"[AVISO] Arquivo não encontrado ou falha de URL. Criando DataFrame de demonstração.")
     
-    # Criação do DataFrame de demonstração
     data = {
         'Time': range(100),
         'Amount': [10 + i % 100 for i in range(100)],
@@ -82,9 +64,16 @@ def carregar_dados_ou_demo():
 def consulta_tool(df: pd.DataFrame, codigo_python: str) -> str:
     """
     Executa um trecho de código Python no DataFrame 'df' e retorna o resultado formatado.
+    
+    Args:
+        df: O DataFrame de dados.
+        codigo_python: O código Python (como string) para executar no DataFrame 'df'.
+        
+    Returns:
+        O resultado da execução do código como uma string.
     """
-    if df is None or not isinstance(df, pd.DataFrame):
-        return "Erro: O DataFrame não foi carregado corretamente para consulta."
+    if df is None:
+        return "Erro: O DataFrame não foi carregado corretamente."
         
     stdout_buffer = io.StringIO()
     sys.stdout = stdout_buffer
@@ -117,8 +106,17 @@ def consulta_tool(df: pd.DataFrame, codigo_python: str) -> str:
 def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str) -> BytesIO | str:
     """
     Gera um gráfico com base no tipo especificado e retorna o buffer de memória da imagem (BytesIO).
+    
+    Args:
+        df: O DataFrame de dados.
+        tipo_grafico: Tipo de gráfico ('hist', 'box', 'scatter', 'bar', 'pie', 'line', 'area').
+        colunas: Lista de colunas a serem plotadas.
+        titulo: Título do gráfico.
+        
+    Returns:
+        Um objeto BytesIO contendo o PNG do gráfico, ou uma string de erro.
     """
-    if df is None or not isinstance(df, pd.DataFrame):
+    if df is None:
         return "Erro: O DataFrame não foi carregado corretamente para gerar o gráfico."
 
     try:
@@ -177,7 +175,7 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
             
         else:
             plt.close()
-            return f"Erro: Tipo de gráfico '{tipo_grafico}' ou número de colunas inválido para o tipo selecionado."
+            return f"Erro: Tipo de gráfico '{tipo_grafico}' ou número de colunas inválido."
         
         plt.suptitle(titulo, fontsize=16)
         plt.tight_layout()
