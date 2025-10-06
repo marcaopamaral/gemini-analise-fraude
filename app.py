@@ -321,18 +321,15 @@ if not st.session_state.messages:
         
 **Para testes uso dados de demonstração criado por mim.**
 
-**Se quiser outro arquivo, me informe o caminho pelo comando:**
-
-**Análise este arquivo CSV:** `https://link-para-o-seu-arquivo.csv`"""
+Se quiser outro arquivo, me informe o caminho pelo comando: **Análise este arquivo CSV:** `https://link-para-o-seu-arquivo.csv`"""
     else:
         welcome_message = """Olá! Eu sou um agente desenvolvido por Marcos para o desafio I2A2.
         
 **Uso dados do arquivo `creditcard.csv`.**
 
-**Se quiser outro arquivo, me informe o caminho pelo comando:**
-
-**Análise este arquivo CSV:** `https://link-para-o-seu-arquivo.csv`"""
+Se quiser outro arquivo, me informe o caminho pelo comando: **Análise este arquivo CSV:** `https://link-para-o-seu-arquivo.csv`"""
     
     st.session_state.messages.append({"role": "model", "parts": [{"text": welcome_message}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
+
 
