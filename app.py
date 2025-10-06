@@ -4,7 +4,7 @@ import json
 import time
 import requests
 from io import BytesIO
-from tools import carregar_dados_ou_demo, consulta_tool, grafico_tool # Importa as ferramentas e o carregador
+from tools import carregar_dados_ou_demo, consulta_tool, grafico_tool, carregar_dados_dinamicamente
 
 # --- Configurações Iniciais ---
 
@@ -15,9 +15,10 @@ MODEL_NAME = "gemini-2.5-flash-preview-05-20"
 # Instrução do sistema para guiar o agente
 SYSTEM_INSTRUCTION = (
     "Você é um Agente de Análise de Fraudes especializado em DataFrames pandas. "
-    "Sua função é responder a perguntas usando as ferramentas 'consulta_tool', 'grafico_tool' ou 'analisar_conclusoes'. "
+    "Sua função é responder a perguntas usando as ferramentas 'carregar_dados', 'consulta_tool', 'grafico_tool' ou 'analisar_conclusoes'. "
     "NÃO gere código Python diretamente na resposta; use as ferramentas."
     "O DataFrame principal é chamado 'df' e contém colunas 'Time', 'V1' a 'V28', 'Amount' e 'Class'. "
+    "Se o usuário fornecer uma URL de um arquivo .csv, use a ferramenta 'carregar_dados' com a URL. "
     "Sempre que o usuário pedir análise numérica ou estatística, use 'consulta_tool'. "
     "Sempre que o usuário pedir visualização (gráfico, histograma, boxplot), use 'grafico_tool'."
     "Quando o usuário solicitar um resumo, conclusões ou o que foi descoberto, use a ferramenta 'analisar_conclusoes'."
@@ -25,15 +26,13 @@ SYSTEM_INSTRUCTION = (
 )
 
 # --- Carregamento de Dados (Cache) ---
+# A função de carregamento foi removida e o DataFrame agora será carregado dinamicamente por uma ferramenta.
+# Inicializamos o DataFrame como None no início da sessão.
+df = None
 
-@st.cache_data(show_spinner="Carregando o DataFrame... (pode levar alguns minutos devido ao tamanho de 150MB)")
-def load_data():
-    """Carrega o DataFrame (via URL) usando a função do tools.py."""
-    return carregar_dados_ou_demo()
-
-# Carrega o DataFrame no estado da aplicação
-df = load_data()
-
+# Se o DataFrame ainda não foi carregado na sessão, carregue o de demonstração
+if "df" not in st.session_state or st.session_state.df is None:
+    st.session_state.df = carregar_dados_ou_demo()
 
 # --- Funções de Comunicação com a API ---
 
@@ -85,7 +84,7 @@ def call_gemini_api(history: list, tools: list | None = None) -> dict:
                 st.error(f"Falha na conexão com a API após {max_retries} tentativas.")
                 return {}
             time.sleep(2 ** attempt)
-        
+            
     return {}
 
 
@@ -99,6 +98,17 @@ def run_conversation(prompt: str):
     available_tools = [
         {
             "functionDeclarations": [
+                {
+                    "name": "carregar_dados",
+                    "description": "Carrega um DataFrame a partir de uma URL de arquivo .csv fornecida. Use esta ferramenta quando o usuário mencionar uma URL de arquivo.",
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "url": {"type": "STRING", "description": "A URL pública do arquivo CSV."}
+                        },
+                        "required": ["url"]
+                    }
+                },
                 {
                     "name": "consulta_tool",
                     "description": "Executa código Python para consultar o DataFrame 'df' e retorna resultados como string. Use para obter estatísticas, valores, linhas específicas, etc.",
@@ -159,13 +169,25 @@ def run_conversation(prompt: str):
 
             # Executa a função localmente
             tool_output = "Erro: Ferramenta não executada."
-            if func_name == "consulta_tool":
+            
+            # --- Adicionado o novo bloco para a ferramenta 'carregar_dados' ---
+            if func_name == "carregar_dados":
+                with st.spinner("⏳ Carregando dados da URL..."):
+                    url = func_args.get("url")
+                    st.session_state.df = carregar_dados_dinamicamente(url) # Carrega o novo DataFrame
+                    if isinstance(st.session_state.df, pd.DataFrame):
+                        tool_output = f"Dados carregados com sucesso! Linhas: {st.session_state.df.shape[0]}, Colunas: {st.session_state.df.shape[1]}."
+                    else:
+                        tool_output = st.session_state.df # É uma string de erro
+            # --- Fim do novo bloco ---
+            
+            elif func_name == "consulta_tool":
                 with st.spinner(f"🛠️ Executando consulta: `{func_args.get('codigo_python')}`"):
-                    tool_output = consulta_tool(df, func_args["codigo_python"])
+                    tool_output = consulta_tool(st.session_state.df, func_args["codigo_python"])
                 
             elif func_name == "grafico_tool":
                 with st.spinner(f"📊 Gerando gráfico: {func_args.get('titulo')}"):
-                    buffer_ou_erro = grafico_tool(df, func_args.get("tipo_grafico"), func_args.get("colunas"), func_args.get("titulo"))
+                    buffer_ou_erro = grafico_tool(st.session_state.df, func_args.get("tipo_grafico"), func_args.get("colunas"), func_args.get("titulo"))
                 
                 if isinstance(buffer_ou_erro, BytesIO):
                     st.session_state.tool_image = buffer_ou_erro
@@ -218,7 +240,7 @@ def run_conversation(prompt: str):
 st.set_page_config(page_title="Agente de Análise de Fraudes (Gemini)", layout="wide")
 
 st.title("FraudGuard: Agente de Análise de Fraudes 💳")
-st.markdown("Use o poder do Gemini e pandas para analisar os dados de fraude de cartão de crédito (150MB).")
+st.markdown("Use o poder do Gemini e pandas para analisar os dados de fraude de cartão de crédito.")
 st.markdown("---")
 
 # 1. Inicialização do Histórico e Imagem Temporária
@@ -240,11 +262,15 @@ with st.sidebar:
     
     st.markdown("---")
     st.header("Status dos Dados")
-    if df.shape[0] < 1000:
-        st.warning(f"Usando DataFrame de Demonstração (Linhas: {df.shape[0]}).")
-        st.write("Verifique se o link do Dropbox na 'tools.py' está acessível publicamente e se a URL termina em `dl=1`.")
+    # Altera a verificação para o estado da sessão
+    if "df" not in st.session_state or st.session_state.df is None or st.session_state.df.empty:
+        st.error("Nenhum DataFrame carregado.")
+        st.info("Por favor, forneça uma URL de um arquivo CSV, ou use a demo padrão.")
+    elif st.session_state.df.shape[0] < 1000:
+        st.warning(f"Usando DataFrame de Demonstração (Linhas: {st.session_state.df.shape[0]}).")
+        st.write("Você pode fornecer uma URL de um novo arquivo CSV para análise.")
     else:
-        st.success(f"Dados Carregados com Sucesso! (Linhas: {df.shape[0]} | Colunas: {df.shape[1]})")
+        st.success(f"Dados Carregados com Sucesso! (Linhas: {st.session_state.df.shape[0]} | Colunas: {st.session_state.df.shape[1]})")
 
 # 3. Exibição do Histórico de Chat
 chat_container = st.container()
