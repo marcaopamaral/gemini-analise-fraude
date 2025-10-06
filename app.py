@@ -326,9 +326,13 @@ Se quiser outro arquivo, me informe o caminho pelo comando:
 
 **Uso dados do arquivo `creditcard.csv`.**
 
-Se quiser outro arquivo, me informe o caminho pelo comando:
+Se quiser outro arquivo, me informe o caminho. Veja execplos de instruções
 
-**Análise este arquivo CSV:** `https://link-para-o-seu-arquivo.csv`"""
-    
+Instrução direta: Carregue e analise o arquivo CSV deste link: **https://seusite.com/dados.csv**
+
+Comando explícito: Use esta URL para os dados: **https://servidor.net/fraudes_junho.csv**
+
+Contextualizado: Quero analisar os dados de fraude de junho. O arquivo está aqui: **https://cloud.storage/fraudes.csv**"""
+ 
     st.session_state.messages.append({"role": "model", "parts": [{"text": welcome_message}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
