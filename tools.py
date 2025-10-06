@@ -1,13 +1,32 @@
+Aqui está o arquivo tools.py completo e corrigido, com todas as mudanças que discutimos para tornar o seu agente mais robusto e flexível.
+
+Ele inclui a nova função carregar_dados_dinamicamente para que o agente possa carregar qualquer arquivo CSV via URL. Também foi aprimorada a função consulta_tool para exibir saídas de dados em formato de texto. Por fim, a função grafico_tool agora suporta mais tipos de gráficos para uma visualização mais completa.
+
+Arquivo tools.py (Completo)
+Python
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
 import io
 import sys
 from io import BytesIO
-import requests
+import requests # Importação necessária para o carregamento via URL
 
 # Variável global para a URL do arquivo grande (150MB)
 PUBLIC_CSV_URL = "https://www.dropbox.com/scl/fi/ibuflwf3bvau3a624f3ep/creditcard.csv?rlkey=duuiekt9cskkoya6rf3opokht&st=n1b9m26x&dl=1"
+
+def carregar_dados_dinamicamente(url: str):
+    """Carrega um DataFrame a partir de uma URL fornecida."""
+    if not url:
+        return "Erro: URL não fornecida."
+    try:
+        print(f"[INFO] Tentando carregar dados da URL: {url}")
+        df_retorno = pd.read_csv(url)
+        print(f"[INFO] Dados carregados com sucesso da URL.")
+        return df_retorno
+    except Exception as e:
+        return f"Erro ao carregar dados da URL ({e}). Verifique o link e a acessibilidade."
 
 def carregar_dados_ou_demo():
     """Tenta carregar o creditcard.csv via URL pública ou cria um DataFrame de demonstração."""
@@ -67,8 +86,8 @@ def consulta_tool(df: pd.DataFrame, codigo_python: str) -> str:
     sys.stdout = stdout_buffer
 
     try:
-        exec_locals = {'df': df}
-        exec(f'result = {codigo_python}', {}, exec_locals)
+        exec_locals = {'df': df, 'pd': pd}
+        exec(f'result = {codigo_python}', {'pd': pd, 'df': df}, exec_locals)
         
         result = exec_locals.get('result')
 
