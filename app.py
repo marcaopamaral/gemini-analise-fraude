@@ -171,12 +171,17 @@ def run_conversation(prompt: str):
                     buffer_ou_erro = grafico_tool(df, func_args.get("tipo_grafico"), func_args.get("colunas"), func_args.get("titulo"))
                 
                 if isinstance(buffer_ou_erro, BytesIO):
-                    # Se for BytesIO (gráfico), armazena no estado para exibição
                     st.session_state.tool_image = buffer_ou_erro
                     tool_output = "Gráfico gerado com sucesso e salvo em buffer."
                 else:
-                    # Se for string (erro)
-                    tool_output = buffer_ou_erro
+                    tool_output = f"Ocorreu um erro ao gerar o gráfico: {buffer_ou_erro}"
+            
+            # NOVO CÓDIGO: AQUI É ONDE VOCÊ DEVE INSERIR O TRECHO
+            elif func_name == "analisar_conclusoes":
+                with st.spinner("🧠 Analisando conclusões..."):
+                    # A ferramenta não executa nada, apenas sinaliza ao modelo para resumir a conversa
+                    tool_output = "Histórico analisado, por favor, gere as conclusões."
+            
             
             # Adiciona o resultado da ferramenta ao histórico
             tool_result_part = {
@@ -287,5 +292,6 @@ if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amoun
 if not st.session_state.messages:
     st.session_state.messages.append({"role": "model", "parts": [{"text": "Olá! Eu sou o FraudGuard. Tenho acesso ao seu DataFrame de fraudes. Como posso analisar seus dados hoje?"}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
+
 
 
