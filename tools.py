@@ -7,8 +7,7 @@ from io import BytesIO
 import requests
 
 # Variável global para a URL do arquivo grande (150MB)
-# LINK FINAL: Aponta para o conteúdo RAW do arquivo creditcard.csv no commit especificado do GitHub.
-PUBLIC_CSV_URL = "https://raw.githubusercontent.com/marcaopamaral/gemini-analise-fraude/cc26b5bb6629a675f1d17ca6491290d13349e3c6/data/creditcard.csv"
+PUBLIC_CSV_URL = "https://www.dropbox.com/scl/fi/ibuflwf3bvau3a624f3ep/creditcard.csv?rlkey=duuiekt9cskkoya6rf3opokht&st=n1b9m26x&dl=1"
 
 def carregar_dados_dinamicamente(url: str):
     """Carrega um DataFrame a partir de uma URL fornecida, suportando compressão (ZIP, GZ, etc.)."""
@@ -16,7 +15,7 @@ def carregar_dados_dinamicamente(url: str):
         return "Erro: URL não fornecida."
     try:
         print(f"[INFO] Tentando carregar dados da URL: {url}")
-        # Suporte a compressão adicionado aqui
+        # AQUI: Adicionado compression='infer'
         df_retorno = pd.read_csv(url, compression='infer')
         print(f"[INFO] Dados carregados com sucesso da URL.")
         return df_retorno
@@ -31,7 +30,7 @@ def carregar_dados_ou_demo():
     if PUBLIC_CSV_URL and PUBLIC_CSV_URL != GENERIC_PLACEHOLDER_URL:
         try:
             print(f"[INFO] Tentando carregar dados da URL: {PUBLIC_CSV_URL}")
-            # Suporte a compressão adicionado aqui
+            # AQUI: Adicionado compression='infer'
             df_retorno = pd.read_csv(PUBLIC_CSV_URL, compression='infer')
             print(f"[INFO] Dados carregados com sucesso via URL.")
             return df_retorno
