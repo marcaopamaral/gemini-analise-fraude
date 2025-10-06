@@ -4,32 +4,25 @@ import os
 import io
 import sys
 from io import BytesIO
-import requests # Importação necessária para o carregamento via URL
+import requests
 
 # Variável global para a URL do arquivo grande (150MB)
-# CORREÇÃO: O link do Dropbox foi alterado de 'dl=0' para 'dl=1' para forçar o download direto
-PUBLIC_CSV_URL = "https://www.dropbox.com/scl/fi/ibuflwf3bvau3a624f3ep/creditcard.csv?rlkey=duuiekt9cskkoya6rf3opokht&st=n1b9m26x&dl=1" 
+PUBLIC_CSV_URL = "https://www.dropbox.com/scl/fi/ibuflwf3bvau3a624f3ep/creditcard.csv?rlkey=duuiekt9cskkoya6rf3opokht&st=n1b9m26x&dl=1"
 
 def carregar_dados_ou_demo():
     """Tenta carregar o creditcard.csv via URL pública ou cria um DataFrame de demonstração."""
     
-    # URL de Placeholder genérica para verificar se o usuário atualizou a chave
     GENERIC_PLACEHOLDER_URL = "https://example.com/seu_arquivo_publico_de_150MB.csv"
 
-    # 1. Tenta carregar o arquivo da URL pública
-    # Verifica se a URL está configurada e não é o placeholder genérico
     if PUBLIC_CSV_URL and PUBLIC_CSV_URL != GENERIC_PLACEHOLDER_URL:
         try:
             print(f"[INFO] Tentando carregar dados da URL: {PUBLIC_CSV_URL}")
-            # pd.read_csv pode ler diretamente de uma URL
             df_retorno = pd.read_csv(PUBLIC_CSV_URL)
             print(f"[INFO] Dados carregados com sucesso via URL.")
             return df_retorno
         except Exception as e:
             print(f"[AVISO] Falha ao carregar dados da URL ({e}). Recorrendo ao carregamento local/demo.")
             
-    # 2. Tenta carregar o arquivo localmente (para desenvolvimento)
-    # Em um ambiente de nuvem, isso provavelmente falhará e levará ao demo
     file_path = 'data/creditcard.csv'
     if os.path.exists(file_path):
         try:
@@ -39,17 +32,13 @@ def carregar_dados_ou_demo():
         except Exception as e:
             print(f"[AVISO] Falha ao carregar arquivo local: {e}. Criando DataFrame de demonstração.")
 
-
-    # 3. Cria DataFrame de demonstração (Fallback final)
     print(f"[AVISO] Arquivo não encontrado ou falha de URL. Criando DataFrame de demonstração.")
     
-    # DataFrame de demonstração com a estrutura exigida
     data = {
         'Time': range(100),
         'Amount': [10 + i % 100 for i in range(100)],
-        'Class': [0] * 95 + [1] * 5  # 5% de fraude
+        'Class': [0] * 95 + [1] * 5
     }
-    # Adiciona as colunas V1 a V28 como zeros
     for i in range(1, 29):
         data[f'V{i}'] = [i * 0.1 for i in range(100)]
         
@@ -108,7 +97,7 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
     
     Args:
         df: O DataFrame de dados.
-        tipo_grafico: Tipo de gráfico ('hist', 'box', 'scatter', 'bar').
+        tipo_grafico: Tipo de gráfico ('hist', 'box', 'scatter', 'bar', 'pie', 'line', 'area').
         colunas: Lista de colunas a serem plotadas.
         titulo: Título do gráfico.
         
@@ -121,7 +110,6 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
     try:
         plt.figure(figsize=(10, 6))
         
-        # Lógica de plotagem (mantida)
         if tipo_grafico == 'hist' and len(colunas) == 1:
             df[colunas[0]].hist(bins=50, edgecolor='black', alpha=0.7)
             plt.title(f'Histograma de {colunas[0]}')
@@ -150,20 +138,41 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
             plt.xlabel('Classe (0=Normal, 1=Fraude)')
             plt.ylabel('Contagem')
             plt.xticks(rotation=0)
+        
+        elif tipo_grafico == 'pie' and len(colunas) == 1 and colunas[0].lower() == 'class':
+            contagem_classe = df['Class'].value_counts()
+            labels = ['Normal', 'Fraude']
+            plt.pie(contagem_classe, labels=labels, autopct='%1.1f%%', startangle=140, colors=['#66b3ff', '#ff9999'])
+            plt.title('Distribuição de Transações (Normal vs. Fraude)')
+            plt.ylabel('')
+            
+        elif tipo_grafico == 'line' and len(colunas) == 2:
+            col_x, col_y = colunas[0], colunas[1]
+            plt.plot(df[col_x], df[col_y])
+            plt.title(f'Gráfico de Linha de {col_x} vs {col_y}')
+            plt.xlabel(col_x)
+            plt.ylabel(col_y)
+        
+        elif tipo_grafico == 'area' and len(colunas) == 2:
+            col_x, col_y = colunas[0], colunas[1]
+            plt.fill_between(df[col_x], df[col_y], color="skyblue", alpha=0.4)
+            plt.plot(df[col_x], df[col_y], color="Slateblue", alpha=0.6)
+            plt.title(f'Gráfico de Área de {col_x} vs {col_y}')
+            plt.xlabel(col_x)
+            plt.ylabel(col_y)
             
         else:
             plt.close()
             return f"Erro: Tipo de gráfico '{tipo_grafico}' ou número de colunas inválido."
         
-        plt.suptitle(titulo, fontsize=16) 
+        plt.suptitle(titulo, fontsize=16)
         plt.tight_layout()
         
-        # Salva o gráfico em um buffer de memória
         buffer = BytesIO()
         plt.savefig(buffer, format='png')
         buffer.seek(0)
         
-        plt.close() # Libera a memória
+        plt.close()
         
         return buffer 
 
@@ -173,4 +182,3 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
     except Exception as e:
         plt.close()
         return f"Erro inesperado ao gerar o gráfico: {e}"
-
