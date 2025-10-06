@@ -7,7 +7,7 @@ from io import BytesIO
 import requests
 
 # Variável global para a URL do arquivo grande (150MB)
-# LINK FINAL: Aponta para a branch 'main' do GitHub, mais estável que o hash de commit.
+# LINK FINAL E ESTÁVEL: Aponta para o arquivo creditcard.csv na branch 'main' do GitHub.
 PUBLIC_CSV_URL = "https://raw.githubusercontent.com/marcaopamaral/gemini-analise-fraude/main/data/creditcard.csv"
 
 def carregar_dados_dinamicamente(url: str):
