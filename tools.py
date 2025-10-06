@@ -74,27 +74,26 @@ def consulta_tool(df: pd.DataFrame, codigo_python: str) -> str:
     if df is None:
         return "Erro: O DataFrame não foi carregado corretamente."
         
-    # Usa um buffer de texto para capturar a saída padrão
     stdout_buffer = io.StringIO()
     sys.stdout = stdout_buffer
 
     try:
-        # A função exec() executa o código; o DataFrame 'df' é passado no escopo local
         exec_locals = {'df': df}
-        exec(codigo_python, {}, exec_locals) # Usa escopo local para 'df'
+        exec(f'result = {codigo_python}', {}, exec_locals)
+        
+        result = exec_locals.get('result')
+
+        if isinstance(result, (pd.Series, pd.DataFrame)):
+            return result.to_markdown()
         
         output = stdout_buffer.getvalue().strip()
         
-        if not output:
-            try:
-                # Tenta avaliar o código (eval) para obter o valor de retorno de expressões simples
-                result = eval(codigo_python, {}, exec_locals)
-                return str(result)
-            except Exception as e:
-                # Erro de eval ou código que não retorna valor
-                return f"Código Python executado. Retorno: OK (Use 'print()' para visualizar grandes outputs) | Erro Eval: {e}"
-        else:
+        if not output and result is not None:
+            return str(result)
+        elif output:
             return output
+        else:
+            return "Comando executado com sucesso, mas não gerou um retorno visível."
             
     except Exception as e:
         return f"Erro na execução do código Python: {e}"
@@ -174,3 +173,4 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
     except Exception as e:
         plt.close()
         return f"Erro inesperado ao gerar o gráfico: {e}"
+
