@@ -262,11 +262,10 @@ with st.sidebar:
     
     st.markdown("---")
     st.header("Status dos Dados")
-    # Altera a verificação para o estado da sessão
-    if "df" not in st.session_state or st.session_state.df is None or st.session_state.df.empty:
-        st.error("Nenhum DataFrame carregado.")
-        st.info("Por favor, forneça uma URL de um arquivo CSV, ou use a demo padrão.")
-    elif st.session_state.df.shape[0] < 1000:
+    #if "df" not in st.session_state or st.session_state.df is None or st.session_state.df.empty:
+    st.error("Nenhum DataFrame carregado.")
+    st.info("Por favor, forneça uma URL de um arquivo CSV, ou use a demo padrão.")
+elif st.session_state.df.shape[0] < 1000:
         st.warning(f"Usando DataFrame de Demonstração (Linhas: {st.session_state.df.shape[0]}).")
         st.write("Você pode fornecer uma URL de um novo arquivo CSV para análise.")
     else:
@@ -340,6 +339,7 @@ Contextualizado: Quero analisar os dados de fraude de junho. O arquivo está aqu
  
     st.session_state.messages.append({"role": "model", "parts": [{"text": welcome_message}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
+
 
 
 
