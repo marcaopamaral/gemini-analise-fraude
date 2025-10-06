@@ -124,13 +124,15 @@ def run_conversation(prompt: str):
                             "colunas": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Lista de 1 ou 2 colunas para o gráfico. Ex: ['Amount']"},
                             "titulo": {"type": "STRING", "description": "Título descritivo para o gráfico."}
                         },
-                        {
+                        {{
                     "name": "analisar_conclusoes",
                     "description": "Analisa o histórico da conversa e as análises já realizadas para tirar conclusões sobre os dados e gerar um resumo final. Use esta ferramenta quando o usuário perguntar 'quais as conclusões' ou 'o que você descobriu' etc.",
                     "parameters": {
                         "type": "OBJECT",
                         "properties": {}, # Sem parâmetros, pois o histórico já é o input
-                    },
+                    }
+                }
+            ]
                         "required": ["tipo_grafico", "colunas", "titulo"]
                     }
                 }
@@ -292,6 +294,7 @@ if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amoun
 if not st.session_state.messages:
     st.session_state.messages.append({"role": "model", "parts": [{"text": "Olá! Eu sou o FraudGuard. Tenho acesso ao seu DataFrame de fraudes. Como posso analisar seus dados hoje?"}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
+
 
 
 
