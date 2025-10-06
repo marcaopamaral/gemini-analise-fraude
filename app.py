@@ -15,12 +15,12 @@ MODEL_NAME = "gemini-2.5-flash-preview-05-20"
 # Instrução do sistema para guiar o agente
 SYSTEM_INSTRUCTION = (
     "Você é um Agente de Análise de Fraudes especializado em DataFrames pandas. "
-    "Sua função é responder a perguntas usando as ferramentas 'consulta_tool', 'grafico_tool' ou 'analisar_conclusoes'. "
+    "Sua função é responder a perguntas usando as ferramentas 'consulta_tool' ou 'grafico_tool'. "
     "NÃO gere código Python diretamente na resposta; use as ferramentas."
     "O DataFrame principal é chamado 'df' e contém colunas 'Time', 'V1' a 'V28', 'Amount' e 'Class'. "
     "Sempre que o usuário pedir análise numérica ou estatística, use 'consulta_tool'. "
     "Sempre que o usuário pedir visualização (gráfico, histograma, boxplot), use 'grafico_tool'."
-    "Quando o usuário solicitar um resumo, conclusões ou o que foi descoberto, use a ferramenta 'analisar_conclusoes'."
+    "Ao exibir tabelas ou os dados do DataFrame, **sempre use .to_markdown(index=False)** no código python."
     "Responda de forma concisa e profissional, em português."
 )
 
@@ -124,15 +124,12 @@ def run_conversation(prompt: str):
                             "colunas": {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Lista de 1 ou 2 colunas para o gráfico. Ex: ['Amount']"},
                             "titulo": {"type": "STRING", "description": "Título descritivo para o gráfico."}
                         },
-                        {{
-                    "name": "analisar_conclusoes",
-                    "description": "Analisa o histórico da conversa e as análises já realizadas para tirar conclusões sobre os dados e gerar um resumo final. Use esta ferramenta quando o usuário perguntar 'quais as conclusões' ou 'o que você descobriu' etc.",
-                    "parameters": {
-                        "type": "OBJECT",
-                        "properties": {}, # Sem parâmetros, pois o histórico já é o input
+                        "required": ["tipo_grafico", "colunas", "titulo"]
                     }
                 }
             ]
+        }
+    ]
 
     # 3. Primeira chamada: Envia a pergunta e o histórico para ver se o modelo usa a ferramenta
     with st.spinner("🧠 Pensando... (Primeira Chamada)"):
@@ -167,17 +164,12 @@ def run_conversation(prompt: str):
                     buffer_ou_erro = grafico_tool(df, func_args.get("tipo_grafico"), func_args.get("colunas"), func_args.get("titulo"))
                 
                 if isinstance(buffer_ou_erro, BytesIO):
+                    # Se for BytesIO (gráfico), armazena no estado para exibição
                     st.session_state.tool_image = buffer_ou_erro
                     tool_output = "Gráfico gerado com sucesso e salvo em buffer."
                 else:
-                    tool_output = f"Ocorreu um erro ao gerar o gráfico: {buffer_ou_erro}"
-            
-            # NOVO CÓDIGO: AQUI É ONDE VOCÊ DEVE INSERIR O TRECHO
-            elif func_name == "analisar_conclusoes":
-                with st.spinner("🧠 Analisando conclusões..."):
-                    # A ferramenta não executa nada, apenas sinaliza ao modelo para resumir a conversa
-                    tool_output = "Histórico analisado, por favor, gere as conclusões."
-            
+                    # Se for string (erro)
+                    tool_output = buffer_ou_erro
             
             # Adiciona o resultado da ferramenta ao histórico
             tool_result_part = {
@@ -288,6 +280,7 @@ if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amoun
 if not st.session_state.messages:
     st.session_state.messages.append({"role": "model", "parts": [{"text": "Olá! Eu sou o FraudGuard. Tenho acesso ao seu DataFrame de fraudes. Como posso analisar seus dados hoje?"}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
+
 
 
 
