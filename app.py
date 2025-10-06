@@ -13,7 +13,7 @@ API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-fl
 MODEL_NAME = "gemini-2.5-flash-preview-05-20"
 
 # Instrução do sistema para guiar o agente
-SSYSTEM_INSTRUCTION = (
+SYSTEM_INSTRUCTION = (
     "Você é um Agente de Análise de Fraudes especializado em DataFrames pandas. "
     "Sua função é responder a perguntas usando as ferramentas 'consulta_tool', 'grafico_tool' ou 'analisar_conclusoes'. "
     "NÃO gere código Python diretamente na resposta; use as ferramentas."
@@ -29,7 +29,6 @@ SSYSTEM_INSTRUCTION = (
 @st.cache_data(show_spinner="Carregando o DataFrame... (pode levar alguns minutos devido ao tamanho de 150MB)")
 def load_data():
     """Carrega o DataFrame (via URL) usando a função do tools.py."""
-    # Chama a função corrigida do tools.py que tenta carregar via URL pública
     return carregar_dados_ou_demo()
 
 # Carrega o DataFrame no estado da aplicação
@@ -40,9 +39,6 @@ df = load_data()
 
 def call_gemini_api(history: list, tools: list | None = None) -> dict:
     """Função central para chamar a API do Gemini com backoff exponencial."""
-    
-    # Certifique-se de que a instrução do sistema está disponível
-    global SYSTEM_INSTRUCTION
     
     # 1. Obtenção da Chave API
     api_key = st.secrets.get("GEMINI_API_KEY", "")
@@ -91,15 +87,6 @@ def call_gemini_api(history: list, tools: list | None = None) -> dict:
             time.sleep(2 ** attempt)
         
     return {}
-        except requests.exceptions.RequestException as req_err:
-            # Captura outros erros de requisição (timeout, DNS, etc.)
-            st.warning(f"Erro de conexão: {req_err}. Tentando novamente em {2**attempt}s...")
-            if attempt == max_retries - 1:
-                st.error(f"Falha na conexão com a API após {max_retries} tentativas.")
-                return {}
-            time.sleep(2 ** attempt)
-        
-    return {} # Retorno de segurança
 
 
 def run_conversation(prompt: str):
@@ -186,12 +173,9 @@ def run_conversation(prompt: str):
                 else:
                     tool_output = f"Ocorreu um erro ao gerar o gráfico: {buffer_ou_erro}"
             
-            # --- Inserção do código para a ferramenta 'analisar_conclusoes' ---
             elif func_name == "analisar_conclusoes":
                 with st.spinner("🧠 Analisando conclusões..."):
-                    # A ferramenta não executa nada, apenas sinaliza ao modelo para resumir a conversa
                     tool_output = "Histórico analisado, por favor, gere as conclusões."
-            # --- Fim da inserção ---
             
             # Adiciona o resultado da ferramenta ao histórico
             tool_result_part = {
@@ -302,12 +286,3 @@ if prompt := st.chat_input("Pergunte sobre os dados (ex: 'Qual a média do Amoun
 if not st.session_state.messages:
     st.session_state.messages.append({"role": "model", "parts": [{"text": "Olá! Eu sou o FraudGuard. Tenho acesso ao seu DataFrame de fraudes. Como posso analisar seus dados hoje?"}]})
     st.rerun() # Reinicia para mostrar a mensagem de boas-vindas
-
-
-
-
-
-
-
-
-
