@@ -1,17 +1,10 @@
-Aqui está o arquivo tools.py completo e corrigido, com todas as mudanças que discutimos para tornar o seu agente mais robusto e flexível.
-
-Ele inclui a nova função carregar_dados_dinamicamente para que o agente possa carregar qualquer arquivo CSV via URL. Também foi aprimorada a função consulta_tool para exibir saídas de dados em formato de texto. Por fim, a função grafico_tool agora suporta mais tipos de gráficos para uma visualização mais completa.
-
-Arquivo tools.py (Completo)
-Python
-
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
 import io
 import sys
 from io import BytesIO
-import requests # Importação necessária para o carregamento via URL
+import requests
 
 # Variável global para a URL do arquivo grande (150MB)
 PUBLIC_CSV_URL = "https://www.dropbox.com/scl/fi/ibuflwf3bvau3a624f3ep/creditcard.csv?rlkey=duuiekt9cskkoya6rf3opokht&st=n1b9m26x&dl=1"
