@@ -10,7 +10,7 @@ import requests
 # PUBLIC_CSV_URL = "https://www.dropbox.com/scl/fi/ibuflwf3bvau3a624f3ep/creditcard.csv?rlkey=duuiekt9cskkoya6rf3opokht&st=n1b9m26x&dl=1"
 # Modificação na variável global para usar o GitHub RAW
 # ATENÇÃO: Substitua ESTE link com o link RAW do seu arquivo no GitHub.
-PUBLIC_CSV_URL = "https://raw.githubusercontent.com/marcaopamaral/SEU_REPOSITORIO/gemini-analise-fraude/data/creditcard.csv"
+PUBLIC_CSV_URL = "https://raw.githubusercontent.com/marcaopamaral/gemini-analise-fraude/data/creditcard.csv"
 
 def carregar_dados_dinamicamente(url: str):
     """Carrega um DataFrame a partir de uma URL fornecida."""
@@ -197,4 +197,5 @@ def grafico_tool(df: pd.DataFrame, tipo_grafico: str, colunas: list, titulo: str
     except Exception as e:
         plt.close()
         return f"Erro inesperado ao gerar o gráfico: {e}"
+
 
