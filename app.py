@@ -18,7 +18,7 @@ SYSTEM_INSTRUCTION = (
     "Sua função é responder a perguntas usando as ferramentas 'carregar_dados', 'consulta_tool', 'grafico_tool' ou 'analisar_conclusoes'. "
     "NÃO gere código Python diretamente na resposta; use as ferramentas."
     "O DataFrame principal é chamado 'df' e contém colunas 'Time', 'V1' a 'V28', 'Amount' e 'Class'. "
-    "Se o usuário fornecer uma URL de um arquivo .csv, use a ferramenta 'carregar_dados' com a URL. "
+    "Se o usuário fornecer uma URL de um arquivo .csv, ou uma URL para um arquivo CSV compactado (como .zip ou .gz), use a ferramenta 'carregar_dados' com a URL."
     "Sempre que o usuário pedir análise numérica ou estatística, use 'consulta_tool'. "
     "Sempre que o usuário pedir visualização (gráfico, histograma, boxplot), use 'grafico_tool'."
     "Quando o usuário solicitar um resumo, conclusões ou o que foi descoberto, use a ferramenta 'analisar_conclusoes'."
