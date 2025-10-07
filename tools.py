@@ -7,7 +7,8 @@ from io import BytesIO
 import requests
 
 # Variável global para a URL do arquivo grande (150MB)
-PUBLIC_CSV_URL = "https://www.dropbox.com/scl/fi/ibuflwf3bvau3a624f3ep/creditcard.csv?rlkey=duuiekt9cskkoya6rf3opokht&st=n1b9m26x&dl=1"
+# LINK FINAL E ESTÁVEL: Aponta para o arquivo creditcard.csv na branch 'main' do GitHub.
+PUBLIC_CSV_URL = "https://raw.githubusercontent.com/marcaopamaral/gemini-analise-fraude/main/data/creditcard.csv"
 
 def carregar_dados_dinamicamente(url: str):
     """Carrega um DataFrame a partir de uma URL fornecida, suportando compressão (ZIP, GZ, etc.)."""
@@ -15,7 +16,7 @@ def carregar_dados_dinamicamente(url: str):
         return "Erro: URL não fornecida."
     try:
         print(f"[INFO] Tentando carregar dados da URL: {url}")
-        # AQUI: Adicionado compression='infer'
+        # Suporte a compressão adicionado aqui
         df_retorno = pd.read_csv(url, compression='infer')
         print(f"[INFO] Dados carregados com sucesso da URL.")
         return df_retorno
@@ -27,26 +28,30 @@ def carregar_dados_ou_demo():
     
     GENERIC_PLACEHOLDER_URL = "https://example.com/seu_arquivo_publico_de_150MB.csv"
 
+    # 1. TENTATIVA DE URL (GitHub)
     if PUBLIC_CSV_URL and PUBLIC_CSV_URL != GENERIC_PLACEHOLDER_URL:
         try:
             print(f"[INFO] Tentando carregar dados da URL: {PUBLIC_CSV_URL}")
-            # AQUI: Adicionado compression='infer'
+            # Comando que carrega o arquivo do GitHub
             df_retorno = pd.read_csv(PUBLIC_CSV_URL, compression='infer')
-            print(f"[INFO] Dados carregados com sucesso via URL.")
+            print(f"[INFO] Dados carregados com sucesso via URL do GitHub.")
             return df_retorno
         except Exception as e:
-            print(f"[AVISO] Falha ao carregar dados da URL ({e}). Recorrendo ao carregamento local/demo.")
+            # Em caso de falha no GitHub, ele tenta o carregamento local
+            print(f"[AVISO] Falha ao carregar dados da URL do GitHub ({e}). Recorrendo ao carregamento local/demo.")
             
+    # 2. TENTATIVA SECUNDÁRIA (CARREGAMENTO LOCAL)
     file_path = 'data/creditcard.csv'
     if os.path.exists(file_path):
         try:
-            # O carregamento local também deve suportar a compressão
+            # Comando que carrega o arquivo localmente
             df_retorno = pd.read_csv(file_path, compression='infer')
             print(f"[INFO] Dados carregados com sucesso de '{file_path}' (Ambiente Local).")
             return df_retorno
         except Exception as e:
             print(f"[AVISO] Falha ao carregar arquivo local: {e}. Criando DataFrame de demonstração.")
 
+    # 3. FALLBACK (DEMONSTRAÇÃO)
     print(f"[AVISO] Arquivo não encontrado ou falha de URL. Criando DataFrame de demonstração.")
     
     data = {

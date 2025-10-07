@@ -169,7 +169,7 @@ def run_conversation(prompt: str):
             # Executa a função localmente
             tool_output = "Erro: Ferramenta não executada."
             
-            # --- Adicionado o novo bloco para a ferramenta 'carregar_dados' ---
+            # --- Bloco da ferramenta 'carregar_dados' ---
             if func_name == "carregar_dados":
                 with st.spinner("⏳ Carregando dados da URL..."):
                     url = func_args.get("url")
@@ -178,7 +178,7 @@ def run_conversation(prompt: str):
                         tool_output = f"Dados carregados com sucesso! Linhas: {st.session_state.df.shape[0]}, Colunas: {st.session_state.df.shape[1]}."
                     else:
                         tool_output = st.session_state.df # É uma string de erro
-            # --- Fim do novo bloco ---
+            # --- Fim do bloco ---
             
             elif func_name == "consulta_tool":
                 with st.spinner(f"🛠️ Executando consulta: `{func_args.get('codigo_python')}`"):
@@ -262,13 +262,19 @@ with st.sidebar:
     st.markdown("---")
     st.header("Status dos Dados")
     
-    # CORREÇÃO FINAL DO BLOCO DE VERIFICAÇÃO DE DATAFRAME
-    # O if/elif/else está corretamente indentado dentro do with st.sidebar:
+    # CORREÇÃO FINAL: Garante que só acessamos atributos de DataFrame se o objeto for um DataFrame.
     is_df_loaded = "df" in st.session_state and st.session_state.df is not None
+    is_valid_df = is_df_loaded and isinstance(st.session_state.df, pd.DataFrame)
     
-    if not is_df_loaded:
-        st.error("Nenhum DataFrame carregado.")
-        st.info("Por favor, forneça uma URL de um arquivo CSV, ou use a demo padrão.")
+    if not is_valid_df:
+        st.error("Nenhum DataFrame válido carregado.")
+        
+        # Se houve uma tentativa de carregamento que resultou em string de erro, exiba a mensagem:
+        if is_df_loaded and not isinstance(st.session_state.df, pd.DataFrame):
+             st.warning(f"Detalhe do Erro: {st.session_state.df}")
+        else:
+             st.info("Por favor, forneça uma URL de um arquivo CSV, ou use a demo padrão.")
+             
     elif st.session_state.df.empty:
         st.error("DataFrame carregado, mas está vazio (0 linhas).")
     elif st.session_state.df.shape[0] < 1000:
