@@ -7,8 +7,8 @@ from io import BytesIO
 import requests
 
 # Variável global para a URL do arquivo grande (150MB)
-# LINK FINAL E ESTÁVEL: Aponta para o arquivo creditcard.csv na branch 'main' do GitHub.
-PUBLIC_CSV_URL = "https://raw.githubusercontent.com/marcaopamaral/gemini-analise-fraude/main/data/creditcard.csv"
+# LINK FINAL: Aponta para o arquivo creditcard.zip na branch 'main' do GitHub.
+PUBLIC_CSV_URL = "https://raw.githubusercontent.com/marcaopamaral/gemini-analise-fraude/main/data/creditcard.zip"
 
 def carregar_dados_dinamicamente(url: str):
     """Carrega um DataFrame a partir de uma URL fornecida, suportando compressão (ZIP, GZ, etc.)."""
@@ -28,7 +28,7 @@ def carregar_dados_ou_demo():
     
     GENERIC_PLACEHOLDER_URL = "https://example.com/seu_arquivo_publico_de_150MB.csv"
 
-    # 1. TENTATIVA DE URL (GitHub)
+    # 1. TENTATIVA DE URL (GitHub com .zip)
     if PUBLIC_CSV_URL and PUBLIC_CSV_URL != GENERIC_PLACEHOLDER_URL:
         try:
             print(f"[INFO] Tentando carregar dados da URL: {PUBLIC_CSV_URL}")
@@ -41,7 +41,7 @@ def carregar_dados_ou_demo():
             print(f"[AVISO] Falha ao carregar dados da URL do GitHub ({e}). Recorrendo ao carregamento local/demo.")
             
     # 2. TENTATIVA SECUNDÁRIA (CARREGAMENTO LOCAL)
-    file_path = 'data/creditcard.csv'
+    file_path = 'data/creditcard.csv' # Note que o nome do arquivo local ainda é .csv
     if os.path.exists(file_path):
         try:
             # Comando que carrega o arquivo localmente
