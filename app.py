@@ -238,8 +238,8 @@ def run_conversation(prompt: str):
 
 st.set_page_config(page_title="Agente de Análise de Fraudes (Gemini)", layout="wide")
 
-st.title("FraudGuard: Agente de Análise de Fraudes 💳")
-st.markdown("Use o poder do Gemini e pandas para analisar os dados de fraude de cartão de crédito.")
+st.title("Agente de Análise de Fraudes 💳")
+st.markdown("Use-o para analisar os dados de fraude de cartão de crédito.")
 st.markdown("---")
 
 # 1. Inicialização do Histórico e Imagem Temporária
